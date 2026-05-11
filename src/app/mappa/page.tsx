@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Search, Navigation, X, MapPin, ChevronUp, Users, Target } from "lucide-react";
+import { Search, Navigation, X, MapPin, Users, Target, Route } from "lucide-react";
 import { toast } from "sonner";
 import type { Client, Settings, RouteResult, StatoCliente } from "@/types/client";
 import RoutePanel from "@/components/RoutePanel";
@@ -298,12 +298,27 @@ export default function MappaPage() {
 
   return (
     <div className="flex h-full">
-      {/* Desktop left panel */}
+      {/* ── Loading overlay ── */}
+      {calculating && (
+        <div className="fixed inset-0 z-[2000] bg-black/50 flex flex-col items-center justify-center gap-4">
+          <div className="bg-white rounded-2xl px-8 py-7 flex flex-col items-center gap-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+            <div className="flex items-center gap-2 text-gray-800 font-semibold text-sm">
+              <Route size={16} className="text-blue-600" />
+              Calcolo percorso ottimale...
+            </div>
+            <p className="text-xs text-gray-400 text-center max-w-[180px]">
+              Sto ottimizzando l&apos;ordine di visita
+            </p>
+          </div>
+        </div>
+      )}
+      {/* ── Desktop left panel ── */}
       <div className="hidden md:flex w-72 shrink-0 flex-col border-r border-gray-200 bg-white">
         {panelInner}
       </div>
 
-      {/* Map */}
+      {/* ── Map ── */}
       <div className="flex-1 relative">
         <ClientMap
           clients={clients}
@@ -313,19 +328,15 @@ export default function MappaPage() {
           routeResult={routeResult}
         />
 
-        {/* Mobile: toggle button — hidden when sheet is open */}
+        {/* ── Mobile FAB ── */}
         <button
-          className={`md:hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 bg-white shadow-lg border border-gray-200 rounded-full px-4 py-2.5 text-sm font-medium text-gray-700 transition-opacity ${
-            sheetOpen ? "opacity-0 pointer-events-none" : "opacity-100"
-          }`}
+          className="md:hidden absolute bottom-20 right-4 z-[600] flex items-center gap-2 bg-blue-600 active:bg-blue-700 text-white shadow-lg rounded-2xl px-4 py-3 text-sm font-semibold"
           onClick={() => setSheetOpen(true)}
         >
-          <Users size={14} />
-          Clienti ({filtered.length})
-          <ChevronUp
-            size={14}
-            className={`transition-transform ${sheetOpen ? "" : "rotate-180"}`}
-          />
+          <Users size={16} />
+          {selectedIds.size > 0
+            ? `${selectedIds.size} selezionat${selectedIds.size === 1 ? "o" : "i"}`
+            : `Clienti (${filtered.length})`}
         </button>
 
         {routeResult && (
@@ -337,41 +348,125 @@ export default function MappaPage() {
         )}
       </div>
 
-      {/* Mobile bottom sheet backdrop */}
+      {/* ── Mobile sheet backdrop ── */}
       {sheetOpen && (
         <div
-          className="md:hidden fixed inset-0 z-[490] bg-black/30"
+          className="md:hidden fixed inset-0 z-[700] bg-black/40"
           onClick={() => setSheetOpen(false)}
         />
       )}
 
-      {/* Mobile bottom sheet */}
-      <div
-        className={`md:hidden fixed inset-x-0 bottom-14 z-[500] bg-white rounded-t-2xl shadow-2xl flex flex-col transition-transform duration-300 ease-in-out max-h-[65vh] ${
-          sheetOpen ? "translate-y-0 pointer-events-auto" : "translate-y-full pointer-events-none"
-        }`}
-      >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-1 shrink-0">
-          <div className="w-10 h-1 rounded-full bg-gray-300" />
-        </div>
-        {/* Sheet header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 shrink-0">
-          <span className="font-semibold text-gray-900 text-sm">
-            Clienti ({filtered.length})
-          </span>
-          <button
-            onClick={() => setSheetOpen(false)}
-            className="p-1 rounded-md hover:bg-gray-100"
+      {/* ── Mobile bottom sheet — completamente separato dal panelInner desktop ── */}
+      {sheetOpen && (
+        <div className="md:hidden fixed inset-x-0 bottom-14 z-[800] bg-white rounded-t-2xl shadow-2xl"
+          style={{ height: "70vh" }}
+        >
+          {/* drag handle */}
+          <div className="flex justify-center pt-3 pb-2">
+            <div className="w-10 h-1 rounded-full bg-gray-300" />
+          </div>
+
+          {/* header */}
+          <div className="flex items-center justify-between px-4 pb-2 border-b border-gray-100">
+            <span className="font-semibold text-sm text-gray-900">
+              Clienti ({filtered.length})
+            </span>
+            <button onClick={() => setSheetOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* search + filter */}
+          <div className="px-3 pt-2 pb-2 space-y-2 border-b border-gray-100">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="w-full border border-gray-200 rounded-md pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Cerca..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={statoFilter}
+              onChange={(e) => setStatoFilter(e.target.value as StatoCliente | "")}
+            >
+              <option value="">Tutti gli stati</option>
+              {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
+                <option key={s} value={s}>{STATO_LABELS[s]}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* route controls */}
+          {selectedIds.size > 0 && (
+            <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100">
+              <span className="text-xs text-blue-600 font-medium flex-1">
+                {selectedIds.size} selezionat{selectedIds.size === 1 ? "o" : "i"}
+              </span>
+              <button
+                onClick={() => { calculateRoute(); setSheetOpen(false); }}
+                disabled={calculating}
+                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-md"
+              >
+                <Navigation size={12} />
+                {calculating ? "Calcolo..." : "Percorso"}
+              </button>
+              <button onClick={clearSelection} className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* scrollable client list — altezza esplicita calcolata */}
+          <div className="overflow-y-auto overscroll-contain"
+            style={{ height: "calc(70vh - 180px)" }}
           >
-            <X size={16} />
-          </button>
+            {filtered.map((c) => {
+              const isSelected = selectedIds.has(c.id);
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => toggleSelect(c.id)}
+                  className={`flex items-center gap-2.5 px-3 py-3 border-b border-gray-50 active:bg-gray-100 ${
+                    isSelected ? "bg-blue-50" : ""
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded shrink-0 border-2 flex items-center justify-center ${
+                    isSelected ? "bg-blue-600 border-blue-600" : "border-gray-300"
+                  }`}>
+                    {isSelected && (
+                      <svg viewBox="0 0 10 8" fill="none" className="w-3 h-3">
+                        <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {c.nome} {c.cognome}
+                    </div>
+                    {c.indirizzo && (
+                      <div className="text-xs text-gray-400 truncate">{c.indirizzo}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSheetOpen(false); findNearestAndRoute(c); }}
+                    className="shrink-0 p-1.5 rounded-lg bg-gray-50 active:bg-orange-50 text-gray-400 active:text-orange-500"
+                    title="Percorso 4 più vicini"
+                  >
+                    <Target size={14} />
+                  </button>
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="py-10 text-center text-sm text-gray-400">Nessun cliente trovato</div>
+            )}
+          </div>
         </div>
-        {/* Sheet content — flex col, overflow-hidden so inner list scrolls */}
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          {panelInner}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
