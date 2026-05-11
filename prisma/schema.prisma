@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+enum StatoCliente {
+  ATTIVO
+  INATTIVO
+  PROSPECT
+}
+
+model Client {
+  id           Int          @id @default(autoincrement())
+  nome         String
+  cognome      String       @default("")
+  email        String?
+  telefono     String?
+  indirizzo    String?
+  note         String?
+  stato        StatoCliente @default(PROSPECT)
+  ultimaVisita DateTime?
+  lat          Float?
+  lng          Float?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model Settings {
+  id         String  @id @default("default")
+  startLat   Float   @default(44.7089)
+  startLng   Float   @default(7.6617)
+  startLabel String  @default("Via San Giorgio 14, Cavallermaggiore")
+}

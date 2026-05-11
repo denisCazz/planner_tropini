@@ -1,0 +1,84 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { geocodeAddress } from "@/lib/geocode";
+
+interface RouteParams {
+  params: Promise<{ id: string }>;
+}
+
+export async function GET(_req: NextRequest, { params }: RouteParams) {
+  const { id } = await params;
+  const client = await prisma.client.findUnique({
+    where: { id: parseInt(id) },
+  });
+
+  if (!client) {
+    return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 });
+  }
+
+  return NextResponse.json(client);
+}
+
+export async function PUT(req: NextRequest, { params }: RouteParams) {
+  const { id } = await params;
+  const body = await req.json();
+
+  const {
+    nome,
+    cognome,
+    email,
+    telefono,
+    indirizzo,
+    note,
+    stato,
+    ultimaVisita,
+  } = body;
+
+  // Ricalcola lat/lng solo se l'indirizzo è cambiato
+  const existing = await prisma.client.findUnique({
+    where: { id: parseInt(id) },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 });
+  }
+
+  let lat = existing.lat;
+  let lng = existing.lng;
+
+  if (indirizzo && indirizzo !== existing.indirizzo) {
+    const geo = await geocodeAddress(indirizzo);
+    if (geo) {
+      lat = geo.lat;
+      lng = geo.lng;
+    }
+  } else if (!indirizzo) {
+    lat = null;
+    lng = null;
+  }
+
+  const updated = await prisma.client.update({
+    where: { id: parseInt(id) },
+    data: {
+      nome,
+      cognome: cognome ?? "",
+      email: email || null,
+      telefono: telefono || null,
+      indirizzo: indirizzo || null,
+      note: note || null,
+      stato,
+      ultimaVisita: ultimaVisita ? new Date(ultimaVisita) : null,
+      lat,
+      lng,
+    },
+  });
+
+  return NextResponse.json(updated);
+}
+
+export async function DELETE(_req: NextRequest, { params }: RouteParams) {
+  const { id } = await params;
+
+  await prisma.client.delete({ where: { id: parseInt(id) } });
+
+  return NextResponse.json({ ok: true });
+}

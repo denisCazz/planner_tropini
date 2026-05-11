@@ -12,11 +12,18 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html, body {
+  height: 100%;
+}
+
+/* Ensure Leaflet tiles display correctly */
+.leaflet-container {
+  z-index: 0;
+}
+
+/* Mobile safe-area support (notch / home indicator) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 body {
