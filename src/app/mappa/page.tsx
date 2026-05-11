@@ -153,7 +153,7 @@ export default function MappaPage() {
 
   const panelInner = (
     <>
-      <div className="p-3 border-b border-gray-100 space-y-2">
+      <div className="p-3 border-b border-gray-100 space-y-2 shrink-0">
         <div className="relative">
           <Search
             size={14}
@@ -181,7 +181,7 @@ export default function MappaPage() {
       </div>
 
       {/* Route controls */}
-      <div className="p-3 border-b border-gray-100 space-y-2">
+      <div className="p-3 border-b border-gray-100 space-y-2 shrink-0">
         {selectedIds.size > 0 ? (
           <>
             <div className="text-xs text-blue-600 font-medium">
@@ -213,7 +213,7 @@ export default function MappaPage() {
       </div>
 
       {/* Stats */}
-      <div className="px-3 py-2 border-b border-gray-100 flex gap-3 text-xs text-gray-500">
+      <div className="px-3 py-2 border-b border-gray-100 flex gap-3 text-xs text-gray-500 shrink-0">
         <span>{clientsWithCoords.length} su mappa</span>
         <span>•</span>
         <span>{filtered.length} in lista</span>
@@ -313,10 +313,12 @@ export default function MappaPage() {
           routeResult={routeResult}
         />
 
-        {/* Mobile: toggle button above bottom nav */}
+        {/* Mobile: toggle button — hidden when sheet is open */}
         <button
-          className="md:hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 bg-white shadow-lg border border-gray-200 rounded-full px-4 py-2.5 text-sm font-medium text-gray-700"
-          onClick={() => setSheetOpen((v) => !v)}
+          className={`md:hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000] flex items-center gap-2 bg-white shadow-lg border border-gray-200 rounded-full px-4 py-2.5 text-sm font-medium text-gray-700 transition-opacity ${
+            sheetOpen ? "opacity-0 pointer-events-none" : "opacity-100"
+          }`}
+          onClick={() => setSheetOpen(true)}
         >
           <Users size={14} />
           Clienti ({filtered.length})
@@ -365,8 +367,8 @@ export default function MappaPage() {
             <X size={16} />
           </button>
         </div>
-        {/* Sheet content */}
-        <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+        {/* Sheet content — flex col, overflow-hidden so inner list scrolls */}
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {panelInner}
         </div>
       </div>
