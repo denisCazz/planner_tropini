@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Search, Navigation, X, MapPin, ChevronUp, Users } from "lucide-react";
+import { Search, Navigation, X, MapPin, ChevronUp, Users, Target } from "lucide-react";
 import { toast } from "sonner";
 import type { Client, Settings, RouteResult, StatoCliente } from "@/types/client";
 import RoutePanel from "@/components/RoutePanel";
@@ -27,6 +27,18 @@ const STATO_DOT: Record<StatoCliente, string> = {
   INATTIVO: "bg-red-500",
   PROSPECT: "bg-yellow-500",
 };
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 export default function MappaPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -79,8 +91,9 @@ export default function MappaPage() {
     setRouteResult(null);
   }, []);
 
-  async function calculateRoute() {
-    if (selectedIds.size < 2) {
+  async function calculateRoute(idsArg?: Set<number>) {
+    const ids = idsArg ?? selectedIds;
+    if (ids.size < 2) {
       toast.error("Seleziona almeno 2 clienti");
       return;
     }
@@ -89,7 +102,7 @@ export default function MappaPage() {
       const res = await fetch("/api/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientIds: Array.from(selectedIds) }),
+        body: JSON.stringify({ clientIds: Array.from(ids) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -106,9 +119,37 @@ export default function MappaPage() {
     setRouteResult(null);
   }
 
+  async function findNearestAndRoute(pivot: Client) {
+    if (!pivot.lat || !pivot.lng) {
+      toast.error(`${pivot.nome} non ha coordinate — aggiungi un indirizzo geocodificato`);
+      return;
+    }
+    const others = clients.filter(
+      (c) => c.id !== pivot.id && c.lat !== null && c.lng !== null
+    );
+    if (others.length === 0) {
+      toast.error("Nessun altro cliente con coordinate");
+      return;
+    }
+    const sorted = [...others].sort(
+      (a, b) =>
+        haversineKm(pivot.lat!, pivot.lng!, a.lat!, a.lng!) -
+        haversineKm(pivot.lat!, pivot.lng!, b.lat!, b.lng!)
+    );
+    const nearest = sorted.slice(0, 4);
+    const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
+    setSelectedIds(ids);
+    setRouteResult(null);
+    setSheetOpen(false);
+    toast.info(`Calcolo percorso con ${pivot.nome} + ${nearest.length} clienti vicini...`);
+    await calculateRoute(ids);
+  }
+
   const clientsWithCoords = clients.filter(
     (c) => c.lat !== null && c.lng !== null
   );
+
+  const sharePhone = process.env.NEXT_PUBLIC_SHARE_PHONE;
 
   const panelInner = (
     <>
@@ -148,7 +189,7 @@ export default function MappaPage() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={calculateRoute}
+                onClick={() => calculateRoute()}
                 disabled={calculating}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium py-1.5 rounded-md transition-colors"
               >
@@ -235,6 +276,14 @@ export default function MappaPage() {
                   </div>
                 )}
               </div>
+              {/* 4 nearest button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); findNearestAndRoute(c); }}
+                className="shrink-0 p-1 rounded hover:bg-orange-50 text-gray-300 hover:text-orange-500 transition-colors"
+                title={`Percorso: ${c.nome} + 4 clienti più vicini`}
+              >
+                <Target size={13} />
+              </button>
             </div>
           );
         })}
@@ -281,6 +330,7 @@ export default function MappaPage() {
           <RoutePanel
             result={routeResult}
             onClose={() => setRouteResult(null)}
+            sharePhone={sharePhone}
           />
         )}
       </div>
