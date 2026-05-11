@@ -220,7 +220,7 @@ export default function MappaPage() {
       </div>
 
       {/* Clients list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overscroll-contain">
         {filtered.map((c) => {
           const isSelected = selectedIds.has(c.id);
           return (
@@ -346,7 +346,7 @@ export default function MappaPage() {
       {/* Mobile bottom sheet */}
       <div
         className={`md:hidden fixed inset-x-0 bottom-14 z-[500] bg-white rounded-t-2xl shadow-2xl flex flex-col transition-transform duration-300 ease-in-out max-h-[65vh] ${
-          sheetOpen ? "translate-y-0" : "translate-y-full"
+          sheetOpen ? "translate-y-0 pointer-events-auto" : "translate-y-full pointer-events-none"
         }`}
       >
         {/* Drag handle */}
@@ -366,7 +366,7 @@ export default function MappaPage() {
           </button>
         </div>
         {/* Sheet content */}
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
           {panelInner}
         </div>
       </div>
