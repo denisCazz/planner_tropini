@@ -38,8 +38,10 @@ model Client {
 }
 
 model Settings {
-  id         String  @id @default("default")
-  startLat   Float   @default(44.7089)
-  startLng   Float   @default(7.6617)
-  startLabel String  @default("Via San Giorgio 14, Cavallermaggiore")
+  id                  String  @id @default("default")
+  startLat            Float   @default(44.7089)
+  startLng            Float   @default(7.6617)
+  startLabel          String  @default("Via San Giorgio 14, Cavallermaggiore")
+  /// Clienti più vicini inclusi dal tasto sulla mappa (1–20)
+  nearestNeighbours   Int     @default(4)
 }

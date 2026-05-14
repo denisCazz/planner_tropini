@@ -13,6 +13,7 @@ export async function GET() {
         startLat: 44.7089,
         startLng: 7.6617,
         startLabel: "Via San Giorgio 14, Cavallermaggiore",
+        nearestNeighbours: 4,
       },
     });
   }
@@ -22,10 +23,22 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
-  const { startLabel } = body;
+  const { startLabel, nearestNeighbours: nnRaw } = body;
 
   let startLat = body.startLat;
   let startLng = body.startLng;
+
+  let nearestNeighbours: number | undefined;
+  if (nnRaw !== undefined && nnRaw !== null) {
+    const n = Number(nnRaw);
+    if (!Number.isInteger(n) || n < 1 || n > 20) {
+      return NextResponse.json(
+        { error: "nearestNeighbours deve essere un intero tra 1 e 20" },
+        { status: 400 }
+      );
+    }
+    nearestNeighbours = n;
+  }
 
   // Se viene fornito solo il label, geocodifica
   if (startLabel && (startLat === undefined || startLng === undefined)) {
@@ -42,12 +55,18 @@ export async function PUT(req: NextRequest) {
 
   const settings = await prisma.settings.upsert({
     where: { id: "default" },
-    update: { startLat, startLng, startLabel },
+    update: {
+      ...(startLat !== undefined && { startLat }),
+      ...(startLng !== undefined && { startLng }),
+      ...(startLabel !== undefined && { startLabel }),
+      ...(nearestNeighbours !== undefined && { nearestNeighbours }),
+    },
     create: {
       id: "default",
-      startLat,
-      startLng,
-      startLabel,
+      startLat: startLat ?? 44.7089,
+      startLng: startLng ?? 7.6617,
+      startLabel: startLabel ?? "Via San Giorgio 14, Cavallermaggiore",
+      nearestNeighbours: nearestNeighbours ?? 4,
     },
   });
 

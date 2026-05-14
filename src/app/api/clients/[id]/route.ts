@@ -89,6 +89,49 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   return NextResponse.json(updated);
 }
 
+/** Imposta solo lat/lng (es. correzione manuale senza cambiare indirizzo) */
+export async function PATCH(req: NextRequest, { params }: RouteParams) {
+  const { id } = await params;
+  const clientId = parseInt(id, 10);
+  if (Number.isNaN(clientId)) {
+    return NextResponse.json({ error: "Id non valido" }, { status: 400 });
+  }
+
+  const body = await req.json();
+  const { lat, lng } = body as { lat?: unknown; lng?: unknown };
+
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    return NextResponse.json(
+      { error: "lat e lng devono essere numeri" },
+      { status: 400 }
+    );
+  }
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return NextResponse.json({ error: "Coordinate non finite" }, { status: 400 });
+  }
+  // Bounds approssimativi Italia / confini
+  if (lat < 35 || lat > 48 || lng < 5 || lng > 20) {
+    return NextResponse.json(
+      { error: "Coordinate fuori dall'area Italia prevista" },
+      { status: 400 }
+    );
+  }
+
+  const existing = await prisma.client.findUnique({
+    where: { id: clientId },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 });
+  }
+
+  const updated = await prisma.client.update({
+    where: { id: clientId },
+    data: { lat, lng },
+  });
+
+  return NextResponse.json(updated);
+}
+
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 

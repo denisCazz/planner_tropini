@@ -46,6 +46,7 @@ export interface Settings {
   startLat: number;
   startLng: number;
   startLabel: string;
+  nearestNeighbours: number;
 }
 
 export interface RouteStep {

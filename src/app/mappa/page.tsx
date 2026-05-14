@@ -70,6 +70,19 @@ export default function MappaPage() {
     }).catch(() => setLoading(false));
   }, []);
 
+  const reloadClients = useCallback(() => {
+    fetch("/api/clients?slim=1")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((clientsData: Client[]) => {
+        const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
+        setClients(data);
+        setTotalUrgenti(data.filter((c: Client) => c.urgente).length);
+      })
+      .catch(() => {});
+  }, []);
+
+  const nearestCount = Math.min(20, Math.max(1, settings?.nearestNeighbours ?? 4));
+
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => {
@@ -83,7 +96,12 @@ export default function MappaPage() {
             c.nome.toLowerCase().includes(q) ||
             c.cognome.toLowerCase().includes(q) ||
             (c.indirizzo ?? "").toLowerCase().includes(q) ||
-            (c.citta ?? "").toLowerCase().includes(q)
+            (c.citta ?? "").toLowerCase().includes(q) ||
+            (c.cap ?? "").toLowerCase().includes(q) ||
+            (c.telefono ?? "").toLowerCase().includes(q) ||
+            (c.telefono2 ?? "").toLowerCase().includes(q) ||
+            (c.marcaStufa ?? "").toLowerCase().includes(q) ||
+            (c.modelloStufa ?? "").toLowerCase().includes(q)
         );
       }
       result = [...result].sort((a, b) => {
@@ -127,13 +145,32 @@ export default function MappaPage() {
     }
   }
 
+  const applyVisitOrder = useCallback(async (visitOrder: number[]) => {
+    if (visitOrder.length < 2) return;
+    setCalculating(true);
+    try {
+      const res = await fetch("/api/route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientIds: visitOrder, visitOrder }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setRouteResult(data);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Errore aggiornamento percorso");
+    } finally {
+      setCalculating(false);
+    }
+  }, []);
+
   function clearSelection() {
     setSelectedIds(new Set());
     setRouteResult(null);
   }
 
   async function findNearestAndRoute(pivot: Client) {
-    if (!pivot.lat || !pivot.lng) {
+    if (pivot.lat == null || pivot.lng == null) {
       toast.error(`${pivot.nome} non ha coordinate — aggiungi un indirizzo geocodificato`);
       return;
     }
@@ -149,7 +186,7 @@ export default function MappaPage() {
         haversineKm(pivot.lat!, pivot.lng!, a.lat!, a.lng!) -
         haversineKm(pivot.lat!, pivot.lng!, b.lat!, b.lng!)
     );
-    const nearest = sorted.slice(0, 4);
+    const nearest = sorted.slice(0, nearestCount);
     const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
     setSelectedIds(ids);
     setRouteResult(null);
@@ -179,18 +216,33 @@ export default function MappaPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select
-          className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={statoFilter}
-          onChange={(e) => setStatoFilter(e.target.value as StatoCliente | "")}
-        >
-          <option value="">Tutti gli stati</option>
+        <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            onClick={() => setStatoFilter("")}
+            className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+              statoFilter === ""
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
+            }`}
+          >
+            Tutti
+          </button>
           {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
-            <option key={s} value={s}>
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatoFilter(s)}
+              className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                statoFilter === s
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
+              }`}
+            >
               {STATO_LABELS[s]}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
         <button
           onClick={() => setUrgenteOnly((v) => !v)}
           className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md border transition-colors ${
@@ -284,7 +336,9 @@ export default function MappaPage() {
       <div className="flex-1 overflow-y-auto overscroll-contain">
         <div className="px-3 py-1.5 bg-orange-50 border-b border-orange-100 flex items-center gap-1.5 text-[10px] text-orange-700">
           <Target size={10} className="shrink-0" />
-          <span><strong>4 vicini</strong> — calcola il percorso ottimale con i 4 clienti più vicini</span>
+          <span>
+            <strong>{nearestCount} vicini</strong> — percorso ottimale con questo cliente più i {nearestCount} più vicini
+          </span>
         </div>
         {filtered.map((c) => {
           const isSelected = selectedIds.has(c.id);
@@ -341,14 +395,14 @@ export default function MappaPage() {
                   </div>
                 )}
               </div>
-              {/* 4 nearest button */}
+              {/* N nearest button */}
               <button
                 onClick={(e) => { e.stopPropagation(); findNearestAndRoute(c); }}
                 className="shrink-0 flex items-center gap-1 px-1.5 py-1 rounded-md bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-600 transition-colors"
-                title={`Percorso: ${c.nome} + 4 clienti più vicini`}
+                title={`Percorso: ${c.nome} + ${nearestCount} clienti più vicini`}
               >
                 <Target size={11} />
-                <span className="text-[10px] font-semibold">4 vicini</span>
+                <span className="text-[10px] font-semibold">{nearestCount} vicini</span>
               </button>
             </div>
           );
@@ -420,6 +474,8 @@ export default function MappaPage() {
             onClose={() => setRouteResult(null)}
             sharePhone={sharePhone}
             settings={settings}
+            onVisitsLogged={reloadClients}
+            onVisitOrderChange={applyVisitOrder}
           />
         )}
       </div>
@@ -463,16 +519,33 @@ export default function MappaPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <select
-              className="w-full border border-gray-200 rounded-md px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={statoFilter}
-              onChange={(e) => setStatoFilter(e.target.value as StatoCliente | "")}
-            >
-              <option value="">Tutti gli stati</option>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                onClick={() => setStatoFilter("")}
+                className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                  statoFilter === ""
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                Tutti
+              </button>
               {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
-                <option key={s} value={s}>{STATO_LABELS[s]}</option>
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStatoFilter(s)}
+                  className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                    statoFilter === s
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  {STATO_LABELS[s]}
+                </button>
               ))}
-            </select>
+            </div>
             <button
               onClick={() => setUrgenteOnly((v) => !v)}
               className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md border transition-colors ${
@@ -541,10 +614,10 @@ export default function MappaPage() {
                   <button
                     onClick={(e) => { e.stopPropagation(); setSheetOpen(false); findNearestAndRoute(c); }}
                     className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-orange-50 active:bg-orange-100 border border-orange-200 text-orange-600"
-                    title="Percorso 4 più vicini"
+                    title={`Percorso ${nearestCount} più vicini`}
                   >
                     <Target size={13} />
-                    <span className="text-[10px] font-semibold">4 vicini</span>
+                    <span className="text-[10px] font-semibold">{nearestCount} vicini</span>
                   </button>
                 </div>
               );

@@ -5,7 +5,10 @@ import type { Client } from "@/types/client";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { clientIds } = body as { clientIds: number[] };
+  const { clientIds, visitOrder } = body as {
+    clientIds: number[];
+    visitOrder?: number[] | null;
+  };
 
   if (!clientIds || clientIds.length < 2) {
     return NextResponse.json(
@@ -36,27 +39,51 @@ export async function POST(req: NextRequest) {
   const startLat = settings?.startLat ?? 44.7089;
   const startLng = settings?.startLng ?? 7.6617;
 
-  const jobs = clientsWithCoords.map((c) => ({
-    id: c.id,
-    location: [c.lng, c.lat] as [number, number],
-    description: `${c.nome} ${c.cognome}`,
-  }));
+  const coordIdSet = new Set(clientsWithCoords.map((c) => c.id));
+
+  /** Ordine visita: ottimizzatore ORS oppure sequenza manuale */
+  let orderedJobIds: number[];
 
   try {
-    const optimResult = await optimizeRoute(startLng, startLat, jobs);
+    if (visitOrder && visitOrder.length > 0) {
+      if (visitOrder.length !== coordIdSet.size) {
+        return NextResponse.json(
+          { error: "L'ordine manuale deve includere tutte le tappe con coordinate" },
+          { status: 400 }
+        );
+      }
+      const seen = new Set<number>();
+      for (const id of visitOrder) {
+        if (!coordIdSet.has(id) || seen.has(id)) {
+          return NextResponse.json(
+            { error: "Ordine non valido: id duplicato o cliente senza coordinate" },
+            { status: 400 }
+          );
+        }
+        seen.add(id);
+      }
+      orderedJobIds = visitOrder;
+    } else {
+      const jobs = clientsWithCoords.map((c) => ({
+        id: c.id,
+        location: [c.lng, c.lat] as [number, number],
+        description: `${c.nome} ${c.cognome}`,
+      }));
 
-    const route = optimResult.routes[0];
-    if (!route) {
-      return NextResponse.json(
-        { error: "Nessun percorso trovato" },
-        { status: 400 }
-      );
+      const optimResult = await optimizeRoute(startLng, startLat, jobs);
+
+      const route = optimResult.routes[0];
+      if (!route) {
+        return NextResponse.json(
+          { error: "Nessun percorso trovato" },
+          { status: 400 }
+        );
+      }
+
+      orderedJobIds = route.steps
+        .filter((s) => s.type === "job" && s.job !== undefined)
+        .map((s) => s.job!);
     }
-
-    // Ordine dei job nel percorso ottimizzato
-    const orderedJobIds = route.steps
-      .filter((s) => s.type === "job" && s.job !== undefined)
-      .map((s) => s.job!);
 
     const orderedClients = orderedJobIds
       .map((jobId, idx) => {

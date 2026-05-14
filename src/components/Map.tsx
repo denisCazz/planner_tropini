@@ -16,6 +16,23 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
 });
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function telHref(raw: string): string {
+  let d = raw.replace(/\D/g, "");
+  if (!d) return "#";
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("39")) return `tel:+${d}`;
+  if (d.length >= 9 && d.length <= 11) return `tel:+39${d}`;
+  return `tel:+${d}`;
+}
+
 function makeIcon(color: string, label?: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
     <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="${color}" stroke="white" stroke-width="2"/>
@@ -156,9 +173,9 @@ export default function ClientMap({
         const marker = L.marker([client.lat, client.lng], { icon });
         marker.bindPopup(
           `<div class="min-w-[180px]">
-            <div class="font-bold text-gray-900">${client.nome} ${client.cognome}</div>
-            ${client.indirizzo ? `<div class="text-xs text-gray-500 mt-1">${client.indirizzo}</div>` : ""}
-            ${client.telefono ? `<div class="text-xs text-gray-600 mt-1">📞 ${client.telefono}</div>` : ""}
+            <div class="font-bold text-gray-900">${escapeHtml(client.cognome)} ${escapeHtml(client.nome)}</div>
+            ${client.indirizzo ? `<div class="text-xs text-gray-500 mt-1">${escapeHtml(client.indirizzo)}</div>` : ""}
+            ${client.telefono ? `<div class="text-xs text-gray-600 mt-1"><a href="${telHref(client.telefono)}">\uD83D\uDCDE ${escapeHtml(client.telefono)}</a></div>` : ""}
             <a href="/clienti/${client.id}" class="inline-block mt-2 text-xs text-blue-600 hover:underline">Apri scheda →</a>
             <br/>
             <button onclick="window.__toggleClient(${client.id})" class="mt-1 text-xs px-2 py-1 rounded ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}">${isSelected ? "Deseleziona" : "Seleziona per percorso"}</button>

@@ -9,6 +9,7 @@ import ImportForm from "@/components/ImportForm";
 export default function ImpostazioniPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [label, setLabel] = useState("");
+  const [nearestNeighbours, setNearestNeighbours] = useState(4);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -18,6 +19,9 @@ export default function ImpostazioniPage() {
       .then((data: Settings) => {
         setSettings(data);
         setLabel(data.startLabel);
+        setNearestNeighbours(
+          typeof data.nearestNeighbours === "number" ? data.nearestNeighbours : 4
+        );
         setLoading(false);
       });
   }, []);
@@ -30,11 +34,14 @@ export default function ImpostazioniPage() {
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startLabel: label }),
+        body: JSON.stringify({ startLabel: label, nearestNeighbours }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSettings(data);
+      setNearestNeighbours(
+        typeof data.nearestNeighbours === "number" ? data.nearestNeighbours : nearestNeighbours
+      );
       toast.success("Impostazioni salvate");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Errore salvataggio");
@@ -85,6 +92,27 @@ export default function ImpostazioniPage() {
                   </span>
                 </div>
               )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Clienti &quot;più vicini&quot; sulla mappa
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  className="w-32 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={nearestNeighbours}
+                  onChange={(e) =>
+                    setNearestNeighbours(
+                      Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 1))
+                    )
+                  }
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Quanti clienti vicini includere con il pulsante arancione (1–20). Default 4.
+                </p>
+              </div>
 
               <button
                 type="submit"

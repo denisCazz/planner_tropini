@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, MapPin, Eye } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, MapPin, Eye, Download } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Client, StatoCliente } from "@/types/client";
@@ -30,6 +30,7 @@ export default function ClientiPage() {
   const [editing, setEditing] = useState<Client | undefined>(undefined);
   const [deleting, setDeleting] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deleteTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   // Debounce search by 350ms
   useEffect(() => {
@@ -68,18 +69,85 @@ export default function ClientiPage() {
     fetchClients();
   }
 
-  async function handleDelete(id: number) {
-    if (!confirm("Eliminare questo cliente?")) return;
-    setDeleting(id);
-    try {
-      await fetch(`/api/clients/${id}`, { method: "DELETE" });
-      toast.success("Cliente eliminato");
-      fetchClients();
-    } catch {
-      toast.error("Errore durante l'eliminazione");
-    } finally {
-      setDeleting(null);
+  function exportClientsCsv() {
+    const headers = [
+      "id",
+      "cognome",
+      "nome",
+      "email",
+      "telefono",
+      "telefono2",
+      "indirizzo",
+      "cap",
+      "citta",
+      "provincia",
+      "stato",
+      "urgente",
+      "ultimaVisita",
+    ] as const;
+    function cell(v: string | number | boolean | null | undefined): string {
+      const s = v == null ? "" : String(v);
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
     }
+    const lines = [
+      headers.join(";"),
+      ...clients.map((c) =>
+        headers
+          .map((h) => {
+            const v = c[h as keyof Client];
+            return cell(v as string | number | boolean | null | undefined);
+          })
+          .join(";")
+      ),
+    ];
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + lines.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `clienti_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast.success("CSV scaricato");
+  }
+
+  function scheduleDelete(id: number) {
+    const prev = deleteTimersRef.current.get(id);
+    if (prev) clearTimeout(prev);
+
+    const toastId = toast("Eliminazione programmata", {
+      description: "Il cliente verrà rimosso tra 5 secondi.",
+      duration: 5000,
+      action: {
+        label: "Annulla",
+        onClick: () => {
+          const t = deleteTimersRef.current.get(id);
+          if (t) clearTimeout(t);
+          deleteTimersRef.current.delete(id);
+          toast.dismiss(toastId);
+        },
+      },
+    });
+
+    const t = setTimeout(() => {
+      deleteTimersRef.current.delete(id);
+      toast.dismiss(toastId);
+      void (async () => {
+        setDeleting(id);
+        try {
+          await fetch(`/api/clients/${id}`, { method: "DELETE" });
+          toast.success("Cliente eliminato");
+          fetchClients();
+        } catch {
+          toast.error("Errore durante l'eliminazione");
+        } finally {
+          setDeleting(null);
+        }
+      })();
+    }, 5000);
+    deleteTimersRef.current.set(id, t);
   }
 
   return (
@@ -91,13 +159,24 @@ export default function ClientiPage() {
             {clients.length} cliente{clients.length !== 1 ? "i" : ""}
           </p>
         </div>
-        <button
-          onClick={openNew}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-        >
-          <Plus size={16} />
-          Nuovo cliente
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={exportClientsCsv}
+            disabled={loading || clients.length === 0}
+            className="flex items-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          >
+            <Download size={16} />
+            Esporta CSV
+          </button>
+          <button
+            onClick={openNew}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          >
+            <Plus size={16} />
+            Nuovo cliente
+          </button>
+        </div>
       </div>
 
       {/* Filtri */}
@@ -109,23 +188,38 @@ export default function ClientiPage() {
           />
           <input
             className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Cerca per nome, email, telefono..."
+            placeholder="Cerca per nome, cognome, email, telefono, indirizzo, città, CAP, marca/modello stufa, note..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={statoFilter}
-          onChange={(e) => setStatoFilter(e.target.value as StatoCliente | "")}
-        >
-          <option value="">Tutti gli stati</option>
+        <div className="flex flex-wrap gap-1">
+          <button
+            type="button"
+            onClick={() => setStatoFilter("")}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+              statoFilter === ""
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+            }`}
+          >
+            Tutti
+          </button>
           {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
-            <option key={s} value={s}>
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatoFilter(s)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                statoFilter === s
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+              }`}
+            >
               {STATO_LABELS[s]}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
       </div>
 
       {/* Tabella — solo desktop */}
@@ -213,7 +307,7 @@ export default function ClientiPage() {
                         <Pencil size={15} />
                       </button>
                       <button
-                        onClick={() => handleDelete(c.id)}
+                        onClick={() => scheduleDelete(c.id)}
                         disabled={deleting === c.id}
                         className="p-1.5 rounded-md hover:bg-red-50 text-gray-500 hover:text-red-500 transition-colors disabled:opacity-50"
                         title="Elimina"
@@ -282,7 +376,7 @@ export default function ClientiPage() {
                   <Pencil size={13} /> Modifica
                 </button>
                 <button
-                  onClick={() => handleDelete(c.id)}
+                  onClick={() => scheduleDelete(c.id)}
                   disabled={deleting === c.id}
                   className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-gray-50 hover:bg-red-50 text-gray-600 hover:text-red-500 text-xs font-medium transition-colors disabled:opacity-50"
                 >
