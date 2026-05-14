@@ -410,6 +410,7 @@ export default function MappaPage() {
             result={routeResult}
             onClose={() => setRouteResult(null)}
             sharePhone={sharePhone}
+            settings={settings}
           />
         )}
       </div>
