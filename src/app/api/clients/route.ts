@@ -7,22 +7,46 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const stato = searchParams.get("stato") as StatoCliente | null;
   const search = searchParams.get("search") ?? "";
+  // ?slim=1 → solo campi necessari per la mappa (molto più veloce)
+  const slim = searchParams.get("slim") === "1";
+
+  const where = {
+    ...(stato ? { stato } : {}),
+    ...(search
+      ? {
+          OR: [
+            { nome: { contains: search, mode: "insensitive" as const } },
+            { cognome: { contains: search, mode: "insensitive" as const } },
+            { email: { contains: search, mode: "insensitive" as const } },
+            { telefono: { contains: search, mode: "insensitive" as const } },
+            { indirizzo: { contains: search, mode: "insensitive" as const } },
+          ],
+        }
+      : {}),
+  };
+
+  if (slim) {
+    const clients = await prisma.client.findMany({
+      where,
+      select: {
+        id: true,
+        nome: true,
+        cognome: true,
+        telefono: true,
+        indirizzo: true,
+        citta: true,
+        stato: true,
+        urgente: true,
+        lat: true,
+        lng: true,
+      },
+      orderBy: [{ cognome: "asc" }, { nome: "asc" }],
+    });
+    return NextResponse.json(clients);
+  }
 
   const clients = await prisma.client.findMany({
-    where: {
-      ...(stato ? { stato } : {}),
-      ...(search
-        ? {
-            OR: [
-              { nome: { contains: search, mode: "insensitive" } },
-              { cognome: { contains: search, mode: "insensitive" } },
-              { email: { contains: search, mode: "insensitive" } },
-              { telefono: { contains: search, mode: "insensitive" } },
-              { indirizzo: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    },
+    where,
     orderBy: [{ cognome: "asc" }, { nome: "asc" }],
   });
 
@@ -46,6 +70,7 @@ export async function POST(req: NextRequest) {
     modelloStufa,
     note,
     stato,
+    urgente,
     ultimaVisita,
   } = body;
 
@@ -79,6 +104,7 @@ export async function POST(req: NextRequest) {
       modelloStufa: modelloStufa || null,
       note: note || null,
       stato: stato ?? "PROSPECT",
+      urgente: urgente ?? false,
       ultimaVisita: ultimaVisita ? new Date(ultimaVisita) : null,
       lat,
       lng,

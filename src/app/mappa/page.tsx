@@ -19,7 +19,7 @@ const ClientMap = dynamic(() => import("@/components/Map"), {
 const STATO_LABELS: Record<StatoCliente, string> = {
   ATTIVO: "Attivo",
   INATTIVO: "Inattivo",
-  PROSPECT: "Prospect",
+  PROSPECT: "Non categorizzato",
 };
 
 const STATO_DOT: Record<StatoCliente, string> = {
@@ -43,24 +43,31 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 export default function MappaPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [filtered, setFiltered] = useState<Client[]>([]);
+  const [totalUrgenti, setTotalUrgenti] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [search, setSearch] = useState("");
   const [statoFilter, setStatoFilter] = useState<StatoCliente | "">("");
+  const [urgenteOnly, setUrgenteOnly] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [focusedId, setFocusedId] = useState<number | null>(null);
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [calculating, setCalculating] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/clients").then((r) => r.json()),
-      fetch("/api/settings").then((r) => r.json()),
-    ]).then(([clientsData, settingsData]) => {
-      setClients(clientsData);
-      setFiltered(clientsData);
+      fetch("/api/clients?slim=1").then((r) => r.ok ? r.json() : []),
+      fetch("/api/settings").then((r) => r.ok ? r.json() : null),
+    ]).then(([clientsData, settingsData]: [Client[], Settings | null]) => {
+      const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
+      setClients(data);
+      setFiltered(data);
+      setTotalUrgenti(data.filter((c: Client) => c.urgente).length);
       setSettings(settingsData);
-    });
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -68,18 +75,20 @@ export default function MappaPage() {
     searchTimeout.current = setTimeout(() => {
       let result = clients;
       if (statoFilter) result = result.filter((c) => c.stato === statoFilter);
+      if (urgenteOnly) result = result.filter((c) => c.urgente);
       if (search) {
         const q = search.toLowerCase();
         result = result.filter(
           (c) =>
             c.nome.toLowerCase().includes(q) ||
             c.cognome.toLowerCase().includes(q) ||
-            (c.indirizzo ?? "").toLowerCase().includes(q)
+            (c.indirizzo ?? "").toLowerCase().includes(q) ||
+            (c.citta ?? "").toLowerCase().includes(q)
         );
       }
       setFiltered(result);
     }, 200);
-  }, [search, statoFilter, clients]);
+  }, [search, statoFilter, urgenteOnly, clients]);
 
   const toggleSelect = useCallback((id: number) => {
     setSelectedIds((prev) => {
@@ -145,7 +154,7 @@ export default function MappaPage() {
     await calculateRoute(ids);
   }
 
-  const clientsWithCoords = clients.filter(
+  const clientsWithCoords = filtered.filter(
     (c) => c.lat !== null && c.lng !== null
   );
 
@@ -178,6 +187,17 @@ export default function MappaPage() {
             </option>
           ))}
         </select>
+        <button
+          onClick={() => setUrgenteOnly((v) => !v)}
+          className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md border transition-colors ${
+            urgenteOnly
+              ? "bg-red-600 border-red-600 text-white"
+              : "border-gray-200 text-gray-500 hover:border-red-400 hover:text-red-500"
+          }`}
+        >
+          <span className="w-2 h-2 rounded-full bg-current" />
+          Solo urgenti
+        </button>
       </div>
 
       {/* Route controls */}
@@ -212,11 +232,48 @@ export default function MappaPage() {
         )}
       </div>
 
+      {/* Selected clients sub-list */}
+      {selectedIds.size > 0 && (
+        <div className="border-b border-blue-100 bg-blue-50 shrink-0">
+          <div className="px-3 pt-2 pb-1 text-xs font-semibold text-blue-700 uppercase tracking-wide">
+            Selezionati
+          </div>
+          <div className="max-h-36 overflow-y-auto">
+            {clients
+              .filter((c) => selectedIds.has(c.id))
+              .map((c) => (
+                <div
+                  key={c.id}
+                  className="flex items-center justify-between px-3 py-1.5 hover:bg-blue-100 transition-colors"
+                >
+                  <button
+                    onClick={() => { setFocusedId(c.id); }}
+                    className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
+                    title="Centra sulla mappa"
+                  >
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
+                    <span className="text-xs text-blue-900 font-medium truncate">
+                      {c.nome} {c.cognome}
+                    </span>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); toggleSelect(c.id); }}
+                    className="ml-2 shrink-0 text-blue-300 hover:text-red-500 transition-colors"
+                    title="Rimuovi dalla selezione"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="px-3 py-2 border-b border-gray-100 flex gap-3 text-xs text-gray-500 shrink-0">
         <span>{clientsWithCoords.length} su mappa</span>
         <span>•</span>
-        <span>{filtered.length} in lista</span>
+        <span className="text-red-500">{totalUrgenti} urgenti</span>
       </div>
 
       {/* Clients list */}
@@ -226,7 +283,7 @@ export default function MappaPage() {
           return (
             <div
               key={c.id}
-              onClick={() => toggleSelect(c.id)}
+              onClick={() => { setFocusedId(c.id); toggleSelect(c.id); }}
               className={`flex items-start gap-2.5 px-3 py-2.5 cursor-pointer border-b border-gray-50 transition-colors ${
                 isSelected ? "bg-blue-50" : "hover:bg-gray-50"
               }`}
@@ -320,12 +377,21 @@ export default function MappaPage() {
 
       {/* ── Map ── */}
       <div className="flex-1 relative">
+        {loading && (
+          <div className="absolute inset-0 z-[500] bg-white/80 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+              <span className="text-sm text-gray-500">Caricamento clienti...</span>
+            </div>
+          </div>
+        )}
         <ClientMap
-          clients={clients}
+          clients={filtered}
           settings={settings}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           routeResult={routeResult}
+          focusedId={focusedId}
         />
 
         {/* ── Mobile FAB ── */}
@@ -397,6 +463,17 @@ export default function MappaPage() {
                 <option key={s} value={s}>{STATO_LABELS[s]}</option>
               ))}
             </select>
+            <button
+              onClick={() => setUrgenteOnly((v) => !v)}
+              className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md border transition-colors ${
+                urgenteOnly
+                  ? "bg-red-600 border-red-600 text-white"
+                  : "border-gray-200 text-gray-500 hover:border-red-400 hover:text-red-500"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-current" />
+              Solo urgenti
+            </button>
           </div>
 
           {/* route controls */}

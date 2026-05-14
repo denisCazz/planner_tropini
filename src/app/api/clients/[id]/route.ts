@@ -37,6 +37,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     modelloStufa,
     note,
     stato,
+    urgente,
     ultimaVisita,
   } = body;
 
@@ -78,6 +79,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       modelloStufa: modelloStufa || null,
       note: note || null,
       stato,
+      urgente: urgente ?? false,
       ultimaVisita: ultimaVisita ? new Date(ultimaVisita) : null,
       lat,
       lng,

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Map, Users, Settings } from "lucide-react";
+import { Map, Users, Settings, LayoutDashboard } from "lucide-react";
 
 const NAV = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/mappa", label: "Mappa", icon: Map },
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/impostazioni", label: "Impostazioni", icon: Settings },

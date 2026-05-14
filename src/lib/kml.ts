@@ -14,9 +14,28 @@ export interface ParsedKmlClient {
   modelloStufa: string;
   note: string;
   stato: string;
+  urgente: boolean;
   ultimaVisita: string;
   lat: number | null;
   lng: number | null;
+}
+
+/**
+ * Maps KML styleUrl to stato + urgente flag.
+ * A = Attivo, I = Inattivo, M = Manutenzione (→ Attivo),
+ * caution/firedept = urgente, default = Prospect.
+ */
+function styleToStatoUrgente(styleUrl: string): { stato: string; urgente: boolean } {
+  const id = styleUrl.toLowerCase();
+  if (/^msn_a/.test(id) || /^sn_a/.test(id) || /^sh_a/.test(id))
+    return { stato: "ATTIVO", urgente: false };
+  if (/^msn_i/.test(id) || /^sn_i/.test(id) || /^sh_i/.test(id))
+    return { stato: "INATTIVO", urgente: false };
+  if (/^msn_m/.test(id) || /^sn_m/.test(id) || /^sh_m/.test(id))
+    return { stato: "ATTIVO", urgente: false }; // manutenzione = cliente attivo
+  if (id.includes("caution") || id.includes("firedept") || id.includes("warning"))
+    return { stato: "PROSPECT", urgente: true };
+  return { stato: "PROSPECT", urgente: false };
 }
 
 function decodeXmlEntities(s: string): string {
@@ -194,6 +213,10 @@ function parsePlacemarks(xmlText: string): ParsedKmlClient[] {
     const descMatch = block.match(/<description>([\s\S]*?)<\/description>/);
     const rawDesc = descMatch ? extractTagContent(descMatch[1]) : "";
 
+    const styleUrlMatch = block.match(/<styleUrl>#([^<]+)<\/styleUrl>/);
+    const styleUrl = styleUrlMatch ? styleUrlMatch[1] : "";
+    const { stato, urgente } = styleToStatoUrgente(styleUrl);
+
     const coordMatch = block.match(/<coordinates>([\s\S]*?)<\/coordinates>/);
     let lat: number | null = null;
     let lng: number | null = null;
@@ -241,7 +264,8 @@ function parsePlacemarks(xmlText: string): ParsedKmlClient[] {
       ...fields,
       modelloStufa: "",
       note: rawDesc ? stripHtml(rawDesc) : "",
-      stato: "PROSPECT",
+      stato,
+      urgente,
       lat,
       lng,
     });

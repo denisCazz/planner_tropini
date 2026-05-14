@@ -4,12 +4,6 @@ import { useState } from "react";
 import type { Client, ClientFormData, StatoCliente } from "@/types/client";
 import { toast } from "sonner";
 
-const STATO_LABELS: Record<StatoCliente, string> = {
-  ATTIVO: "Attivo",
-  INATTIVO: "Inattivo",
-  PROSPECT: "Prospect",
-};
-
 interface ClientFormProps {
   initial?: Client;
   onSaved: (client: Client) => void;
@@ -30,6 +24,7 @@ const EMPTY: ClientFormData = {
   modelloStufa: "",
   note: "",
   stato: "PROSPECT",
+  urgente: false,
   ultimaVisita: "",
 };
 
@@ -54,6 +49,7 @@ export default function ClientForm({
           modelloStufa: initial.modelloStufa ?? "",
           note: initial.note ?? "",
           stato: initial.stato,
+          urgente: initial.urgente,
           ultimaVisita: initial.ultimaVisita
             ? initial.ultimaVisita.substring(0, 10)
             : "",
@@ -240,34 +236,78 @@ export default function ClientForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Stato
-          </label>
-          <select
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.stato}
-            onChange={(e) => set("stato", e.target.value as StatoCliente)}
+      {/* ── Icona / Stato + Urgente ── */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Icona mappa
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { value: "PROSPECT", color: "#d97706", label: "Non categorizzato" },
+              { value: "ATTIVO",   color: "#16a34a", label: "Attivo" },
+              { value: "INATTIVO", color: "#6b7280", label: "Inattivo" },
+            ] as { value: StatoCliente; color: string; label: string }[]
+          ).map(({ value, color, label }) => {
+            const active = form.stato === value && !form.urgente;
+            return (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, stato: value, urgente: false }))}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all ${
+                  active
+                    ? "border-gray-400 bg-gray-50 shadow-sm"
+                    : "border-transparent bg-gray-100 hover:bg-gray-200"
+                }`}
+              >
+                <svg width="18" height="22" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill={color} stroke="white" strokeWidth="2"/>
+                  <circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>
+                </svg>
+                <span style={{ color }}>{label}</span>
+              </button>
+            );
+          })}
+          {/* Urgente (rosso con !) */}
+          <button
+            type="button"
+            onClick={() => setForm((p) => ({ ...p, urgente: !p.urgente }))}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 text-sm font-medium transition-all ${
+              form.urgente
+                ? "border-red-400 bg-red-50 shadow-sm"
+                : "border-transparent bg-gray-100 hover:bg-gray-200"
+            }`}
           >
-            {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
-              <option key={s} value={s}>
-                {STATO_LABELS[s]}
-              </option>
-            ))}
-          </select>
+            <svg width="18" height="22" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="#dc2626" stroke="white" strokeWidth="2"/>
+              <circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>
+              <text x="14" y="18" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#dc2626">!</text>
+            </svg>
+            <span className="text-red-600">Urgente</span>
+          </button>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Ultima Visita
-          </label>
-          <input
-            type="date"
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.ultimaVisita}
-            onChange={(e) => set("ultimaVisita", e.target.value)}
-          />
-        </div>
+        <p className="text-xs text-gray-400 mt-1.5">
+          {form.urgente
+            ? "Pin rosso con ! — cliente da visitare con priorità"
+            : form.stato === "ATTIVO"
+            ? "Pin verde — cliente attivo"
+            : form.stato === "INATTIVO"
+            ? "Pin grigio — cliente inattivo"
+            : "Pin arancione — non categorizzato"}
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Ultima Visita
+        </label>
+        <input
+          type="date"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={form.ultimaVisita}
+          onChange={(e) => set("ultimaVisita", e.target.value)}
+        />
       </div>
 
       <div>

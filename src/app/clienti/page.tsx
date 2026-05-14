@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plus, Search, Pencil, Trash2, MapPin, Eye } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -10,35 +10,44 @@ import ClientForm from "@/components/ClientForm";
 
 const STATO_COLORS: Record<StatoCliente, string> = {
   ATTIVO: "bg-green-100 text-green-800",
-  INATTIVO: "bg-red-100 text-red-800",
+  INATTIVO: "bg-gray-100 text-gray-700",
   PROSPECT: "bg-yellow-100 text-yellow-800",
 };
 
 const STATO_LABELS: Record<StatoCliente, string> = {
   ATTIVO: "Attivo",
   INATTIVO: "Inattivo",
-  PROSPECT: "Prospect",
+  PROSPECT: "Non categorizzato",
 };
 
 export default function ClientiPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statoFilter, setStatoFilter] = useState<StatoCliente | "">("");
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<Client | undefined>(undefined);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounce search by 350ms
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [search]);
 
   const fetchClients = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
-    if (search) params.set("search", search);
+    if (debouncedSearch) params.set("search", debouncedSearch);
     if (statoFilter) params.set("stato", statoFilter);
     const res = await fetch(`/api/clients?${params.toString()}`);
     const data = await res.json();
     setClients(data);
     setLoading(false);
-  }, [search, statoFilter]);
+  }, [debouncedSearch, statoFilter]);
 
   useEffect(() => {
     fetchClients();

@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
           modelloStufa: item.modelloStufa || null,
           note: item.note || null,
           stato: (item.stato as StatoCliente) ?? "PROSPECT",
+          urgente: item.urgente ?? false,
           ultimaVisita: item.ultimaVisita ? new Date(item.ultimaVisita) : null,
           lat: item.lat,
           lng: item.lng,
@@ -133,6 +134,8 @@ export async function POST(req: NextRequest) {
           marcaStufa: item.marcaStufa || existing.marcaStufa,
           modelloStufa: item.modelloStufa || existing.modelloStufa,
           note: item.note || existing.note,
+          stato: (item.stato as StatoCliente) || "PROSPECT",
+          urgente: item.urgente ?? false,
           ultimaVisita: item.ultimaVisita
             ? new Date(item.ultimaVisita)
             : existing.ultimaVisita,

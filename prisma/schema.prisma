@@ -29,6 +29,7 @@ model Client {
   modelloStufa String?
   note         String?
   stato        StatoCliente @default(PROSPECT)
+  urgente      Boolean      @default(false)
   ultimaVisita DateTime?
   lat          Float?
   lng          Float?

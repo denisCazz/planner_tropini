@@ -1,8 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Client, Settings, RouteResult } from "@/types/client";
 
 // Fix Leaflet default marker icon in Next.js
@@ -30,7 +33,7 @@ function makeIcon(color: string, label?: string) {
 
 const STATO_COLORS: Record<string, string> = {
   ATTIVO: "#16a34a",
-  INATTIVO: "#dc2626",
+  INATTIVO: "#6b7280",
   PROSPECT: "#d97706",
 };
 
@@ -51,6 +54,7 @@ interface MapProps {
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
   routeResult: RouteResult | null;
+  focusedId?: number | null;
 }
 
 export default function ClientMap({
@@ -59,14 +63,18 @@ export default function ClientMap({
   selectedIds,
   onToggleSelect,
   routeResult,
+  focusedId,
 }: MapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const markersRef = useRef<globalThis.Map<number, L.Marker>>(new globalThis.Map());
   const homeMarkerRef = useRef<L.Marker | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
+  const pulseMarkerRef = useRef<L.Marker | null>(null);
+  const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Init map
+  // Init map + cluster group
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -80,38 +88,65 @@ export default function ClientMap({
       maxZoom: 19,
     }).addTo(map);
 
+    const clusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      disableClusteringAtZoom: 15,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      chunkedLoading: true,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        const size = count < 10 ? 36 : count < 100 ? 42 : 48;
+        const r = size / 2 - 2;
+        return L.divIcon({
+          html: `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+            <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#2563eb" stroke="white" stroke-width="2.5" opacity="0.92"/>
+            <text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" font-size="${count < 100 ? 13 : 10}" font-weight="bold" fill="white" font-family="sans-serif">${count}</text>
+          </svg>`,
+          className: "",
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2],
+        });
+      },
+    });
+
+    clusterGroup.addTo(map);
+    clusterGroupRef.current = clusterGroup;
     mapRef.current = map;
 
     return () => {
       map.remove();
       mapRef.current = null;
+      clusterGroupRef.current = null;
     };
   }, []);
 
   // Update client markers
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
+    const clusterGroup = clusterGroupRef.current;
+    if (!map || !clusterGroup) return;
 
-    // Remove old markers not in current clients
+    // Remove markers no longer in the filtered list
     const currentIds = new Set(clients.map((c) => c.id));
+    const toRemove: L.Marker[] = [];
     markersRef.current.forEach((marker, id) => {
       if (!currentIds.has(id)) {
-        marker.remove();
+        toRemove.push(marker);
         markersRef.current.delete(id);
       }
     });
+    if (toRemove.length > 0) clusterGroup.removeLayers(toRemove);
 
-    // Add/update markers
+    // Add new markers / update existing icons
+    const toAdd: L.Marker[] = [];
     clients.forEach((client) => {
       if (client.lat === null || client.lng === null) return;
 
       const isSelected = selectedIds.has(client.id);
-      const color = STATO_COLORS[client.stato] ?? "#6b7280";
-      const icon = makeIcon(
-        color,
-        isSelected ? "✓" : undefined
-      );
+      const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#6b7280");
+      const icon = makeIcon(color, isSelected ? "✓" : (client.urgente ? "!" : undefined));
 
       const existing = markersRef.current.get(client.id);
       if (existing) {
@@ -124,20 +159,71 @@ export default function ClientMap({
             <div class="font-bold text-gray-900">${client.nome} ${client.cognome}</div>
             ${client.indirizzo ? `<div class="text-xs text-gray-500 mt-1">${client.indirizzo}</div>` : ""}
             ${client.telefono ? `<div class="text-xs text-gray-600 mt-1">📞 ${client.telefono}</div>` : ""}
-            ${client.email ? `<div class="text-xs text-gray-600">${client.email}</div>` : ""}
             <a href="/clienti/${client.id}" class="inline-block mt-2 text-xs text-blue-600 hover:underline">Apri scheda →</a>
             <br/>
             <button onclick="window.__toggleClient(${client.id})" class="mt-1 text-xs px-2 py-1 rounded ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}">${isSelected ? "Deseleziona" : "Seleziona per percorso"}</button>
           </div>`
         );
-        marker.on("click", () => {
-          onToggleSelect(client.id);
-        });
-        marker.addTo(map);
+        marker.on("click", () => onToggleSelect(client.id));
         markersRef.current.set(client.id, marker);
+        toAdd.push(marker);
       }
     });
+    if (toAdd.length > 0) clusterGroup.addLayers(toAdd);
   }, [clients, selectedIds, onToggleSelect]);
+
+  // Focus / highlight marker with pulse ring
+  useEffect(() => {
+    const map = mapRef.current;
+    const clusterGroup = clusterGroupRef.current;
+
+    if (pulseMarkerRef.current) {
+      pulseMarkerRef.current.remove();
+      pulseMarkerRef.current = null;
+    }
+    if (pulseTimeoutRef.current) {
+      clearTimeout(pulseTimeoutRef.current);
+      pulseTimeoutRef.current = null;
+    }
+
+    if (!focusedId || !map || !clusterGroup) return;
+
+    const marker = markersRef.current.get(focusedId);
+    if (!marker) return;
+
+    const latlng = marker.getLatLng();
+
+    // Zoom into cluster and open popup
+    clusterGroup.zoomToShowLayer(marker, () => {
+      marker.openPopup();
+    });
+
+    // Animated SVG pulse ring (centered on pin body)
+    const pulseIcon = L.divIcon({
+      html: `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="32" cy="32" r="16" fill="none" stroke="#2563eb" stroke-width="3">
+          <animate attributeName="r" values="16;30" dur="1.2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.9;0" dur="1.2s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="32" cy="32" r="10" fill="none" stroke="#2563eb" stroke-width="2">
+          <animate attributeName="r" values="10;24" dur="1.2s" begin="0.4s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.7;0" dur="1.2s" begin="0.4s" repeatCount="indefinite"/>
+        </circle>
+      </svg>`,
+      className: "",
+      iconSize: [64, 64],
+      iconAnchor: [32, 54], // align ring center with pin body center
+    });
+
+    const pulse = L.marker(latlng, { icon: pulseIcon, interactive: false, zIndexOffset: 500 });
+    pulse.addTo(map);
+    pulseMarkerRef.current = pulse;
+
+    pulseTimeoutRef.current = setTimeout(() => {
+      pulseMarkerRef.current?.remove();
+      pulseMarkerRef.current = null;
+    }, 3000);
+  }, [focusedId]);
 
   // Expose toggle to popup buttons
   useEffect(() => {
@@ -182,7 +268,6 @@ export default function ClientMap({
         color: "#2563eb",
         weight: 4,
         opacity: 0.8,
-        dashArray: undefined,
       });
       polyline.addTo(map);
       polylineRef.current = polyline;

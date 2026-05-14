@@ -15,6 +15,7 @@ export interface Client {
   modelloStufa: string | null;
   note: string | null;
   stato: StatoCliente;
+  urgente: boolean;
   ultimaVisita: string | null;
   lat: number | null;
   lng: number | null;
@@ -36,6 +37,7 @@ export interface ClientFormData {
   modelloStufa: string;
   note: string;
   stato: StatoCliente;
+  urgente: boolean;
   ultimaVisita: string;
 }
 

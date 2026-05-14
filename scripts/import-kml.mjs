@@ -105,6 +105,19 @@ function parseDescriptionFields(text) {
   return { telefono: phones[0] || "", telefono2: phones[1] || "", indirizzo, cap, citta, provincia, marcaStufa, ultimaVisita };
 }
 
+function styleToStatoUrgente(styleUrl) {
+  const id = styleUrl.toLowerCase();
+  if (/^msn_a/.test(id) || /^sn_a/.test(id) || /^sh_a/.test(id))
+    return { stato: "ATTIVO", urgente: false };
+  if (/^msn_i/.test(id) || /^sn_i/.test(id) || /^sh_i/.test(id))
+    return { stato: "INATTIVO", urgente: false };
+  if (/^msn_m/.test(id) || /^sn_m/.test(id) || /^sh_m/.test(id))
+    return { stato: "ATTIVO", urgente: false };
+  if (id.includes("caution") || id.includes("firedept") || id.includes("warning"))
+    return { stato: "PROSPECT", urgente: true };
+  return { stato: "PROSPECT", urgente: false };
+}
+
 function parsePlacemarks(xmlText) {
   const results = [];
   const placemarkRe = /<Placemark[^>]*>([\s\S]*?)<\/Placemark>/g;
@@ -118,6 +131,10 @@ function parsePlacemarks(xmlText) {
 
     const descMatch = block.match(/<description>([\s\S]*?)<\/description>/);
     const rawDesc = descMatch ? extractTagContent(descMatch[1]) : "";
+
+    const styleUrlMatch = block.match(/<styleUrl>#([^<]+)<\/styleUrl>/);
+    const styleUrl = styleUrlMatch ? styleUrlMatch[1] : "";
+    const { stato, urgente } = styleToStatoUrgente(styleUrl);
 
     const coordMatch = block.match(/<coordinates>([\s\S]*?)<\/coordinates>/);
     let lat = null, lng = null;
@@ -140,7 +157,7 @@ function parsePlacemarks(xmlText) {
 
     const fields = rawDesc ? parseDescriptionFields(rawDesc) : { telefono: "", telefono2: "", indirizzo: "", cap: "", citta: "", provincia: "", marcaStufa: "", ultimaVisita: "" };
 
-    results.push({ nome, cognome, email: "", ...fields, modelloStufa: "", note: rawDesc ? stripHtml(rawDesc) : "", stato: "PROSPECT", lat, lng });
+    results.push({ nome, cognome, email: "", ...fields, modelloStufa: "", note: rawDesc ? stripHtml(rawDesc) : "", stato, urgente, lat, lng });
   }
 
   return results;
@@ -201,7 +218,8 @@ if (toCreate.length > 0) {
       indirizzo: item.indirizzo || null, cap: item.cap || null,
       citta: item.citta || null, provincia: item.provincia || null,
       marcaStufa: item.marcaStufa || null, modelloStufa: null,
-      note: item.note || null, stato: "PROSPECT",
+      note: item.note || null, stato: item.stato || "PROSPECT",
+      urgente: item.urgente ?? false,
       ultimaVisita: item.ultimaVisita ? new Date(item.ultimaVisita) : null,
       lat: item.lat, lng: item.lng,
     })),
@@ -232,6 +250,8 @@ for (let i = 0; i < toUpdate.length; i += BATCH) {
             marcaStufa: item.marcaStufa || existing.marcaStufa,
             modelloStufa: item.modelloStufa || existing.modelloStufa,
             note: item.note || existing.note,
+            stato: item.stato || "PROSPECT",
+            urgente: item.urgente ?? false,
             ultimaVisita: item.ultimaVisita ? new Date(item.ultimaVisita) : existing.ultimaVisita,
             lat: item.lat ?? existing.lat, lng: item.lng ?? existing.lng,
           },

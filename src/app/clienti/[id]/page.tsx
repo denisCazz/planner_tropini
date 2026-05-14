@@ -19,7 +19,7 @@ const STATO_COLORS: Record<StatoCliente, string> = {
 const STATO_LABELS: Record<StatoCliente, string> = {
   ATTIVO: "Attivo",
   INATTIVO: "Inattivo",
-  PROSPECT: "Prospect",
+  PROSPECT: "Non categorizzato",
 };
 
 export default function ClientDetailPage({
@@ -75,6 +75,11 @@ export default function ClientDetailPage({
         >
           {STATO_LABELS[client.stato]}
         </span>
+        {client.urgente && (
+          <span className="inline-flex px-2.5 py-1 rounded-full text-sm font-medium bg-red-100 text-red-700">
+            Urgente
+          </span>
+        )}
         <button
           onClick={() => setDrawerOpen(true)}
           className="p-2 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
