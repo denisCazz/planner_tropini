@@ -86,6 +86,10 @@ export default function MappaPage() {
             (c.citta ?? "").toLowerCase().includes(q)
         );
       }
+      result = [...result].sort((a, b) => {
+        const cmp = (a.cognome ?? "").localeCompare(b.cognome ?? "", "it");
+        return cmp !== 0 ? cmp : (a.nome ?? "").localeCompare(b.nome ?? "", "it");
+      });
       setFiltered(result);
     }, 200);
   }, [search, statoFilter, urgenteOnly, clients]);
@@ -253,7 +257,7 @@ export default function MappaPage() {
                   >
                     <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
                     <span className="text-xs text-blue-900 font-medium truncate">
-                      {c.nome} {c.cognome}
+                      <span className="font-semibold">{c.cognome}</span>{c.cognome && c.nome ? " " : ""}{c.nome}
                     </span>
                   </button>
                   <button
@@ -278,6 +282,10 @@ export default function MappaPage() {
 
       {/* Clients list */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="px-3 py-1.5 bg-orange-50 border-b border-orange-100 flex items-center gap-1.5 text-[10px] text-orange-700">
+          <Target size={10} className="shrink-0" />
+          <span><strong>4 vicini</strong> — calcola il percorso ottimale con i 4 clienti più vicini</span>
+        </div>
         {filtered.map((c) => {
           const isSelected = selectedIds.has(c.id);
           return (
@@ -317,7 +325,7 @@ export default function MappaPage() {
                     className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`}
                   />
                   <span className="text-sm font-medium text-gray-900 truncate">
-                    {c.nome} {c.cognome}
+                    <span className="font-semibold">{c.cognome}</span>{c.cognome && c.nome ? " " : ""}{c.nome}
                   </span>
                 </div>
                 {c.indirizzo && (
@@ -336,10 +344,11 @@ export default function MappaPage() {
               {/* 4 nearest button */}
               <button
                 onClick={(e) => { e.stopPropagation(); findNearestAndRoute(c); }}
-                className="shrink-0 p-1 rounded hover:bg-orange-50 text-gray-300 hover:text-orange-500 transition-colors"
+                className="shrink-0 flex items-center gap-1 px-1.5 py-1 rounded-md bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-600 transition-colors"
                 title={`Percorso: ${c.nome} + 4 clienti più vicini`}
               >
-                <Target size={13} />
+                <Target size={11} />
+                <span className="text-[10px] font-semibold">4 vicini</span>
               </button>
             </div>
           );
@@ -523,7 +532,7 @@ export default function MappaPage() {
                   <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium text-gray-900 truncate">
-                      {c.nome} {c.cognome}
+                      <span className="font-semibold">{c.cognome}</span>{c.cognome && c.nome ? " " : ""}{c.nome}
                     </div>
                     {c.indirizzo && (
                       <div className="text-xs text-gray-400 truncate">{c.indirizzo}</div>
@@ -531,10 +540,11 @@ export default function MappaPage() {
                   </div>
                   <button
                     onClick={(e) => { e.stopPropagation(); setSheetOpen(false); findNearestAndRoute(c); }}
-                    className="shrink-0 p-1.5 rounded-lg bg-gray-50 active:bg-orange-50 text-gray-400 active:text-orange-500"
+                    className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-orange-50 active:bg-orange-100 border border-orange-200 text-orange-600"
                     title="Percorso 4 più vicini"
                   >
-                    <Target size={14} />
+                    <Target size={13} />
+                    <span className="text-[10px] font-semibold">4 vicini</span>
                   </button>
                 </div>
               );

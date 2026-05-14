@@ -141,7 +141,10 @@ export default function ClientiPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">
-                  Nome
+                  <span className="flex items-center gap-1">
+                    Nome
+                    <span className="text-xs font-normal text-gray-400 tracking-wide">A→Z</span>
+                  </span>
                 </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">
                   Contatti
@@ -164,7 +167,8 @@ export default function ClientiPage() {
               {clients.map((c) => (
                 <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3 font-medium text-gray-900">
-                    {c.nome} {c.cognome}
+                    <span className="font-semibold">{c.cognome}</span>
+                    {c.cognome && c.nome ? " " : ""}{c.nome}
                   </td>
                   <td className="px-4 py-3 text-gray-600">
                     <div>{c.email}</div>
@@ -237,7 +241,8 @@ export default function ClientiPage() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="font-semibold text-gray-900">
-                    {c.nome} {c.cognome}
+                    <span>{c.cognome}</span>
+                    {c.cognome && c.nome ? " " : ""}{c.nome}
                   </div>
                   {c.indirizzo && (
                     <div className="flex items-center gap-1 mt-0.5">

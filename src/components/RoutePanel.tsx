@@ -53,19 +53,7 @@ export default function RoutePanel({ result, onClose, sharePhone, settings }: Ro
   }
 
   function buildWhatsAppText(): string {
-    const today = new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" });
-    const lines = [
-      `\u{1F5FA}\uFE0F *Percorso di visita — ${today}*`,
-      `\u{1F4CD} ${result.totalDistance} km  \u23F1\uFE0F ~${result.totalDuration} min  \u{1F464} ${result.steps.length} clienti`,
-      "",
-      ...result.steps.map(({ order, client }) => {
-        const addr = [client.indirizzo, client.citta].filter(Boolean).join(", ");
-        return `${order}. *${client.nome} ${client.cognome}*${addr ? `\n    ${addr}` : ""}${client.telefono ? `\n    \uD83D\uDCDE ${client.telefono}` : ""}`;
-      }),
-      "",
-      `\u{1F517} Apri in Google Maps:\n${buildGoogleMapsUrl()}`,
-    ];
-    return lines.join("\n");
+    return buildGoogleMapsUrl();
   }
 
   function handleWhatsApp() {
