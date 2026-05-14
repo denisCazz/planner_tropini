@@ -95,6 +95,7 @@ export default function ClientDetailPage({
         {[
           { label: "Email", value: client.email },
           { label: "Telefono", value: client.telefono },
+          { label: "Telefono 2", value: client.telefono2 },
           {
             label: "Indirizzo",
             value: client.indirizzo,
@@ -106,6 +107,11 @@ export default function ClientDetailPage({
                 </span>
               ) : null,
           },
+          { label: "CAP", value: client.cap },
+          { label: "Città", value: client.citta },
+          { label: "Provincia", value: client.provincia },
+          { label: "Marca Stufa", value: client.marcaStufa },
+          { label: "Modello Stufa", value: client.modelloStufa },
           {
             label: "Ultima visita",
             value: client.ultimaVisita

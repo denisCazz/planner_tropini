@@ -6,7 +6,13 @@ export interface Client {
   cognome: string;
   email: string | null;
   telefono: string | null;
+  telefono2: string | null;
   indirizzo: string | null;
+  cap: string | null;
+  citta: string | null;
+  provincia: string | null;
+  marcaStufa: string | null;
+  modelloStufa: string | null;
   note: string | null;
   stato: StatoCliente;
   ultimaVisita: string | null;
@@ -21,7 +27,13 @@ export interface ClientFormData {
   cognome: string;
   email: string;
   telefono: string;
+  telefono2: string;
   indirizzo: string;
+  cap: string;
+  citta: string;
+  provincia: string;
+  marcaStufa: string;
+  modelloStufa: string;
   note: string;
   stato: StatoCliente;
   ultimaVisita: string;

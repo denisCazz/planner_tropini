@@ -21,7 +21,13 @@ const EMPTY: ClientFormData = {
   cognome: "",
   email: "",
   telefono: "",
+  telefono2: "",
   indirizzo: "",
+  cap: "",
+  citta: "",
+  provincia: "",
+  marcaStufa: "",
+  modelloStufa: "",
   note: "",
   stato: "PROSPECT",
   ultimaVisita: "",
@@ -39,7 +45,13 @@ export default function ClientForm({
           cognome: initial.cognome,
           email: initial.email ?? "",
           telefono: initial.telefono ?? "",
+          telefono2: initial.telefono2 ?? "",
           indirizzo: initial.indirizzo ?? "",
+          cap: initial.cap ?? "",
+          citta: initial.citta ?? "",
+          provincia: initial.provincia ?? "",
+          marcaStufa: initial.marcaStufa ?? "",
+          modelloStufa: initial.modelloStufa ?? "",
           note: initial.note ?? "",
           stato: initial.stato,
           ultimaVisita: initial.ultimaVisita
@@ -137,6 +149,18 @@ export default function ClientForm({
             placeholder="+39 333 1234567"
           />
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Telefono 2
+          </label>
+          <input
+            type="tel"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={form.telefono2}
+            onChange={(e) => set("telefono2", e.target.value)}
+            placeholder="+39 347 7654321"
+          />
+        </div>
       </div>
 
       <div>
@@ -147,11 +171,73 @@ export default function ClientForm({
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={form.indirizzo}
           onChange={(e) => set("indirizzo", e.target.value)}
-          placeholder="Via Roma 1, Torino"
+          placeholder="Via Roma 1"
         />
         <p className="text-xs text-gray-400 mt-1">
           Le coordinate vengono calcolate automaticamente dall&apos;indirizzo
         </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Città
+          </label>
+          <input
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={form.citta}
+            onChange={(e) => set("citta", e.target.value)}
+            placeholder="Torino"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            CAP
+          </label>
+          <input
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={form.cap}
+            onChange={(e) => set("cap", e.target.value)}
+            placeholder="10100"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Provincia
+          </label>
+          <input
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={form.provincia}
+            onChange={(e) => set("provincia", e.target.value)}
+            placeholder="TO"
+            maxLength={2}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Marca Stufa
+          </label>
+          <input
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={form.marcaStufa}
+            onChange={(e) => set("marcaStufa", e.target.value)}
+            placeholder="MCZ"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Modello Stufa
+          </label>
+          <input
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={form.modelloStufa}
+            onChange={(e) => set("modelloStufa", e.target.value)}
+            placeholder="Star 3.0"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
