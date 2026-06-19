@@ -2,19 +2,20 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Users, Loader2, List } from "lucide-react";
+import { Users, History, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Client, Settings, RouteResult, StatoCliente } from "@/types/client";
+import type { Client, Settings, RouteResult, RouteHistoryEntry, StatoCliente } from "@/types/client";
 import RoutePanel from "@/components/RoutePanel";
 import MapTopBar from "@/components/mappa/MapTopBar";
 import ClientListPanel from "@/components/mappa/ClientListPanel";
 import NearestRoutePrompt from "@/components/mappa/NearestRoutePrompt";
+import RouteHistoryPanel from "@/components/mappa/RouteHistoryPanel";
 
 const ClientMap = dynamic(() => import("@/components/Map"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
-      <Loader2 size={24} className="animate-spin text-indigo-400" />
+    <div className="w-full h-full flex items-center justify-center bg-slate-50">
+      <Loader2 size={22} className="animate-spin text-indigo-500" />
     </div>
   ),
 });
@@ -31,50 +32,30 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function MapLegend() {
-  return (
-    <div className="absolute bottom-4 left-4 z-[400] hidden sm:block pointer-events-none">
-      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-slate-200/80 px-3 py-2.5 space-y-1.5">
-        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-          Legenda
-        </p>
-        {[
-          { color: "bg-emerald-500", label: "Attivo" },
-          { color: "bg-slate-400", label: "Inattivo" },
-          { color: "bg-amber-500", label: "Non categorizzato" },
-          { color: "bg-red-500", label: "Urgente" },
-          { color: "bg-indigo-600", label: "Selezionato ✓" },
-        ].map(({ color, label }) => (
-          <div key={label} className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${color} ring-2 ring-white shadow-sm`} />
-            <span className="text-[11px] text-slate-600">{label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+type MobilePanel = "clients" | "history" | null;
+type DesktopPanel = "clients" | "history";
 
 export default function MappaPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [filtered, setFiltered] = useState<Client[]>([]);
-  const [totalUrgenti, setTotalUrgenti] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [search, setSearch] = useState("");
   const [statoFilter, setStatoFilter] = useState<StatoCliente | "">("");
   const [urgenteOnly, setUrgenteOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [focusedId, setFocusedId] = useState<number | null>(null);
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [sheetOpen, setSheetOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [desktopPanel, setDesktopPanel] = useState<DesktopPanel>("clients");
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
   const [nearestPrompt, setNearestPrompt] = useState<Client | null>(null);
+  const [routeHistory, setRouteHistory] = useState<RouteHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSelectedSizeRef = useRef(0);
-
-  const filteredIdSet = useMemo(() => new Set(filtered.map((c) => c.id)), [filtered]);
 
   const mapClients = useMemo(() => {
     const byId = new Map<number, Client>();
@@ -86,6 +67,15 @@ export default function MappaPage() {
     return Array.from(byId.values());
   }, [clients, filtered, selectedIds]);
 
+  const loadHistory = useCallback(() => {
+    setHistoryLoading(true);
+    fetch("/api/route-history")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: RouteHistoryEntry[]) => setRouteHistory(Array.isArray(data) ? data : []))
+      .catch(() => setRouteHistory([]))
+      .finally(() => setHistoryLoading(false));
+  }, []);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/clients?slim=1").then((r) => (r.ok ? r.json() : [])),
@@ -95,20 +85,18 @@ export default function MappaPage() {
         const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
         setClients(data);
         setFiltered(data);
-        setTotalUrgenti(data.filter((c: Client) => c.urgente).length);
         setSettings(settingsData);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+    loadHistory();
+  }, [loadHistory]);
 
   const reloadClients = useCallback(() => {
     fetch("/api/clients?slim=1")
       .then((r) => (r.ok ? r.json() : []))
       .then((clientsData: Client[]) => {
-        const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
-        setClients(data);
-        setTotalUrgenti(data.filter((c) => c.urgente).length);
+        setClients(Array.isArray(clientsData) ? clientsData : []);
       })
       .catch(() => {});
   }, []);
@@ -154,7 +142,6 @@ export default function MappaPage() {
     setRouteResult(null);
   }, []);
 
-  // Popup vicini: solo al passaggio da 0 a 1 cliente selezionato
   useEffect(() => {
     const prev = prevSelectedSizeRef.current;
     const curr = selectedIds.size;
@@ -165,7 +152,7 @@ export default function MappaPage() {
         if (client.lat != null && client.lng != null) {
           setNearestPrompt(client);
         } else {
-          toast.error(`${client.cognome} ${client.nome} non ha coordinate sulla mappa`);
+          toast.error("Cliente senza coordinate sulla mappa");
         }
       }
     }
@@ -177,7 +164,30 @@ export default function MappaPage() {
     setFocusedId(id);
   }, []);
 
-  async function calculateRoute(idsArg?: Set<number>) {
+  async function saveToHistory(data: RouteResult, clientIds: number[]) {
+    try {
+      const res = await fetch("/api/route-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientIds,
+          totalDistance: data.totalDistance,
+          totalDuration: data.totalDuration,
+        }),
+      });
+      if (res.ok) {
+        const entry = await res.json();
+        setRouteHistory((prev) => [entry, ...prev].slice(0, 50));
+      }
+    } catch {
+      /* storico opzionale */
+    }
+  }
+
+  async function calculateRoute(
+    idsArg?: Set<number>,
+    options?: { visitOrder?: number[]; saveHistory?: boolean }
+  ) {
     const ids = idsArg ?? selectedIds;
     if (ids.size < 2) {
       toast.error("Seleziona almeno 2 clienti");
@@ -185,14 +195,22 @@ export default function MappaPage() {
     }
     setCalculating(true);
     try {
+      const clientIds = options?.visitOrder ?? Array.from(ids);
       const res = await fetch("/api/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientIds: Array.from(ids) }),
+        body: JSON.stringify({
+          clientIds,
+          visitOrder: options?.visitOrder,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setRouteResult(data);
+      if (options?.saveHistory !== false && !options?.visitOrder) {
+        const orderIds = data.steps.map((s: { client: Client }) => s.client.id);
+        await saveToHistory(data, orderIds);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Errore calcolo percorso");
     } finally {
@@ -228,7 +246,7 @@ export default function MappaPage() {
   const runNearestRoute = useCallback(
     async (pivot: Client) => {
       if (pivot.lat == null || pivot.lng == null) {
-        toast.error("Cliente senza coordinate — verifica l'indirizzo");
+        toast.error("Cliente senza coordinate");
         return;
       }
       const others = clients.filter((c) => c.id !== pivot.id && c.lat !== null && c.lng !== null);
@@ -246,18 +264,44 @@ export default function MappaPage() {
       setSelectedIds(ids);
       setRouteResult(null);
       setNearestPrompt(null);
-      setSheetOpen(false);
-      toast.info(`Percorso con ${pivot.cognome} + ${nearest.length} clienti vicini...`);
+      setMobilePanel(null);
       await calculateRoute(ids);
     },
     [clients, nearestCount]
   );
 
-  const clientsOnMap = mapClients.filter((c) => c.lat !== null && c.lng !== null).length;
+  async function restoreFromHistory(entry: RouteHistoryEntry) {
+    setSelectedIds(new Set(entry.clientIds));
+    setMobilePanel(null);
+    setDesktopPanel("clients");
+    await calculateRoute(new Set(entry.clientIds), {
+      visitOrder: entry.clientIds,
+      saveHistory: false,
+    });
+    toast.success("Percorso ripristinato");
+  }
+
+  async function deleteHistoryEntry(id: number) {
+    const res = await fetch(`/api/route-history/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setRouteHistory((prev) => prev.filter((e) => e.id !== id));
+    }
+  }
+
+  function openHistory() {
+    loadHistory();
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      setSidebarOpen(true);
+      setDesktopPanel("history");
+    } else {
+      setMobilePanel("history");
+    }
+  }
+
   const sharePhone = process.env.NEXT_PUBLIC_SHARE_PHONE;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-slate-100">
+    <div className="flex flex-col h-full min-h-0 bg-slate-50">
       <MapTopBar
         search={search}
         onSearchChange={setSearch}
@@ -266,44 +310,67 @@ export default function MappaPage() {
         urgenteOnly={urgenteOnly}
         onUrgenteOnlyChange={setUrgenteOnly}
         selectedCount={selectedIds.size}
-        clientsOnMap={clientsOnMap}
-        totalUrgenti={totalUrgenti}
         filteredCount={filtered.length}
         calculating={calculating}
         onCalculateRoute={() => calculateRoute()}
         onClearSelection={clearSelection}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        onOpenHistory={openHistory}
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((v) => !v)}
       />
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative">
         {sidebarOpen && (
-          <aside className="hidden md:flex w-[19rem] shrink-0 border-r border-slate-200/80">
-            <ClientListPanel
-              filtered={filtered}
-              clients={clients}
-              selectedIds={selectedIds}
-              filteredIdSet={filteredIdSet}
-              onFocus={focusClient}
-              onToggleSelect={toggleSelect}
-            />
+          <aside className="hidden md:flex w-72 shrink-0 border-r border-slate-200 bg-white flex-col">
+            <div className="flex border-b border-slate-200 shrink-0">
+              <SideTab
+                active={desktopPanel === "clients"}
+                onClick={() => setDesktopPanel("clients")}
+                label="Clienti"
+              />
+              <SideTab
+                active={desktopPanel === "history"}
+                onClick={() => {
+                  setDesktopPanel("history");
+                  loadHistory();
+                }}
+                label="Storico"
+              />
+            </div>
+            <div className="flex-1 min-h-0">
+              {desktopPanel === "clients" ? (
+                <ClientListPanel
+                  filtered={filtered}
+                  selectedIds={selectedIds}
+                  onFocus={focusClient}
+                  onToggleSelect={toggleSelect}
+                />
+              ) : (
+                <RouteHistoryPanel
+                  entries={routeHistory}
+                  loading={historyLoading}
+                  onClose={() => setDesktopPanel("clients")}
+                  onRestore={restoreFromHistory}
+                  onDelete={deleteHistoryEntry}
+                />
+              )}
+            </div>
           </aside>
         )}
 
         <div className="flex-1 relative min-w-0">
           {loading && (
-            <div className="absolute inset-0 z-[500] bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 size={32} className="text-indigo-500 animate-spin" />
-                <span className="text-sm text-slate-500">Caricamento clienti...</span>
-              </div>
+            <div className="absolute inset-0 z-[500] bg-white/80 flex items-center justify-center">
+              <Loader2 size={28} className="text-indigo-500 animate-spin" />
             </div>
           )}
 
           {calculating && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-white/95 backdrop-blur-sm shadow-lg rounded-full px-4 py-2 border border-indigo-100">
-              <Loader2 size={16} className="text-indigo-600 animate-spin" />
-              <span className="text-sm font-medium text-slate-800">Calcolo percorso...</span>
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] bg-white border border-slate-200 rounded-full px-3 py-1.5 text-xs font-medium text-slate-700 flex items-center gap-2 shadow-sm">
+              <Loader2 size={14} className="animate-spin text-indigo-600" />
+              Calcolo...
             </div>
           )}
 
@@ -315,19 +382,6 @@ export default function MappaPage() {
             routeResult={routeResult}
             focusedId={focusedId}
           />
-
-          <MapLegend />
-
-          <button
-            type="button"
-            className="md:hidden absolute bottom-20 right-4 z-[600] flex items-center gap-2 bg-indigo-600 active:bg-indigo-700 text-white shadow-xl shadow-indigo-600/25 rounded-2xl px-4 py-3 text-sm font-semibold"
-            onClick={() => setSheetOpen(true)}
-          >
-            <List size={16} />
-            {selectedIds.size > 0
-              ? `${selectedIds.size} selezionat${selectedIds.size === 1 ? "o" : "i"}`
-              : `Clienti (${filtered.length})`}
-          </button>
 
           {routeResult && (
             <RoutePanel
@@ -342,6 +396,72 @@ export default function MappaPage() {
         </div>
       </div>
 
+      {/* Mobile: barra azioni sopra nav */}
+      <div className="md:hidden fixed bottom-14 inset-x-0 z-[500] flex border-t border-slate-200 bg-white">
+        <button
+          type="button"
+          onClick={() => setMobilePanel(mobilePanel === "clients" ? null : "clients")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium ${
+            mobilePanel === "clients" ? "text-indigo-600 bg-indigo-50" : "text-slate-600"
+          }`}
+        >
+          <Users size={16} />
+          Clienti
+          {selectedIds.size > 0 && (
+            <span className="bg-indigo-600 text-white text-[10px] px-1.5 rounded-full">
+              {selectedIds.size}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            loadHistory();
+            setMobilePanel(mobilePanel === "history" ? null : "history");
+          }}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium border-l border-slate-200 ${
+            mobilePanel === "history" ? "text-indigo-600 bg-indigo-50" : "text-slate-600"
+          }`}
+        >
+          <History size={16} />
+          Storico
+        </button>
+      </div>
+
+      {/* Mobile sheet */}
+      {mobilePanel && (
+        <>
+          <div
+            className="md:hidden fixed inset-0 z-[600] bg-black/30"
+            onClick={() => setMobilePanel(null)}
+          />
+          <div className="md:hidden fixed inset-x-0 bottom-[6.75rem] z-[700] bg-white rounded-t-xl border-t border-slate-200 flex flex-col max-h-[55vh] shadow-xl">
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2 mb-1 shrink-0" />
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {mobilePanel === "clients" ? (
+                <ClientListPanel
+                  filtered={filtered}
+                  selectedIds={selectedIds}
+                  onFocus={(id) => {
+                    focusClient(id);
+                    setMobilePanel(null);
+                  }}
+                  onToggleSelect={toggleSelect}
+                />
+              ) : (
+                <RouteHistoryPanel
+                  entries={routeHistory}
+                  loading={historyLoading}
+                  onClose={() => setMobilePanel(null)}
+                  onRestore={restoreFromHistory}
+                  onDelete={deleteHistoryEntry}
+                />
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       {nearestPrompt && (
         <NearestRoutePrompt
           client={nearestPrompt}
@@ -350,57 +470,30 @@ export default function MappaPage() {
           onDismiss={() => setNearestPrompt(null)}
         />
       )}
-
-      {sheetOpen && (
-        <>
-          <div
-            className="md:hidden fixed inset-0 z-[700] bg-slate-900/40 backdrop-blur-[2px]"
-            onClick={() => setSheetOpen(false)}
-          />
-          <div
-            className="md:hidden fixed inset-x-0 bottom-14 z-[800] bg-slate-50 rounded-t-2xl shadow-2xl border-t border-slate-200 flex flex-col"
-            style={{ height: "65vh" }}
-          >
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-slate-300" />
-            </div>
-            <div className="flex items-center justify-between px-4 pb-3 border-b border-slate-200">
-              <div className="flex items-center gap-2">
-                <Users size={16} className="text-indigo-600" />
-                <span className="font-semibold text-sm text-slate-900">
-                  Clienti ({filtered.length})
-                </span>
-              </div>
-              {selectedIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    calculateRoute();
-                    setSheetOpen(false);
-                  }}
-                  disabled={calculating}
-                  className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg"
-                >
-                  Calcola percorso
-                </button>
-              )}
-            </div>
-            <div className="flex-1 min-h-0">
-              <ClientListPanel
-                filtered={filtered}
-                clients={clients}
-                selectedIds={selectedIds}
-                filteredIdSet={filteredIdSet}
-                onFocus={(id) => {
-                  focusClient(id);
-                  setSheetOpen(false);
-                }}
-                onToggleSelect={toggleSelect}
-              />
-            </div>
-          </div>
-        </>
-      )}
     </div>
+  );
+}
+
+function SideTab({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-1 py-2.5 text-xs font-medium border-b-2 transition-colors ${
+        active
+          ? "border-indigo-600 text-indigo-600"
+          : "border-transparent text-slate-500 hover:text-slate-700"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

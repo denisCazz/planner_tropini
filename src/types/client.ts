@@ -61,6 +61,16 @@ export interface RouteResult {
   totalDuration: number; // minuti
 }
 
+export interface RouteHistoryEntry {
+  id: number;
+  createdAt: string;
+  clientIds: number[];
+  label: string;
+  totalDistance: number;
+  totalDuration: number;
+  stopCount: number;
+}
+
 export interface ImportResult {
   created: number;
   updated: number;
