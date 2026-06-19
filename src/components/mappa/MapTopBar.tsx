@@ -28,6 +28,7 @@ interface MapTopBarProps {
   onUrgenteOnlyChange: (v: boolean) => void;
   selectedCount: number;
   filteredCount: number;
+  mapFocusMode?: boolean;
   calculating: boolean;
   onCalculateRoute: () => void;
   onClearSelection: () => void;
@@ -47,6 +48,7 @@ export default function MapTopBar({
   onUrgenteOnlyChange,
   selectedCount,
   filteredCount,
+  mapFocusMode,
   calculating,
   onCalculateRoute,
   onClearSelection,
@@ -146,8 +148,12 @@ export default function MapTopBar({
       )}
 
       <div className="hidden md:flex items-center justify-between px-4 py-1 border-t border-slate-100 text-[11px] text-slate-500">
-        <span>{filteredCount} clienti</span>
-        {selectedCount > 0 && (
+        <span>
+          {mapFocusMode
+            ? `Mappa: ${selectedCount} tappe del percorso`
+            : `${filteredCount} clienti`}
+        </span>
+        {selectedCount > 0 && !mapFocusMode && (
           <span className="text-indigo-600 font-medium">
             {selectedCount} selezionat{selectedCount === 1 ? "o" : "i"}
           </span>

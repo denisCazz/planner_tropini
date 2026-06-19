@@ -58,14 +58,26 @@ export default function MappaPage() {
   const prevSelectedSizeRef = useRef(0);
 
   const mapClients = useMemo(() => {
-    const byId = new Map<number, Client>();
-    for (const c of filtered) byId.set(c.id, c);
-    for (const id of selectedIds) {
-      const c = clients.find((x) => x.id === id);
-      if (c) byId.set(id, c);
+    // Con selezione o percorso: sulla mappa solo le tappe del percorso
+    if (selectedIds.size > 0 || routeResult) {
+      const ids =
+        routeResult != null
+          ? routeResult.steps.map((s) => s.client.id)
+          : [...selectedIds];
+
+      const byId = new Map<number, Client>();
+      for (const id of ids) {
+        const fromStep = routeResult?.steps.find((s) => s.client.id === id)?.client;
+        const c = fromStep ?? clients.find((x) => x.id === id);
+        if (c) byId.set(id, c);
+      }
+      return Array.from(byId.values());
     }
-    return Array.from(byId.values());
-  }, [clients, filtered, selectedIds]);
+
+    return filtered;
+  }, [clients, filtered, selectedIds, routeResult]);
+
+  const mapFocusMode = selectedIds.size > 0 || routeResult != null;
 
   const loadHistory = useCallback(() => {
     setHistoryLoading(true);
@@ -311,6 +323,7 @@ export default function MappaPage() {
         onUrgenteOnlyChange={setUrgenteOnly}
         selectedCount={selectedIds.size}
         filteredCount={filtered.length}
+        mapFocusMode={mapFocusMode}
         calculating={calculating}
         onCalculateRoute={() => calculateRoute()}
         onClearSelection={clearSelection}
@@ -381,6 +394,7 @@ export default function MappaPage() {
             onToggleSelect={toggleSelect}
             routeResult={routeResult}
             focusedId={focusedId}
+            focusMode={mapFocusMode}
           />
 
           {routeResult && (

@@ -85,9 +85,16 @@ function buildPopupHtml(client: Client, isSelected: boolean): string {
   </div>`;
 }
 
-function markerIcon(client: Client, isSelected: boolean) {
+function markerIcon(client: Client, isSelected: boolean, stopOrder?: number) {
   const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#6b7280");
-  const label = isSelected ? "✓" : client.urgente ? "!" : undefined;
+  const label =
+    stopOrder != null
+      ? String(stopOrder)
+      : isSelected
+        ? "✓"
+        : client.urgente
+          ? "!"
+          : undefined;
   return makeIcon(color, label, client.id);
 }
 
@@ -98,6 +105,8 @@ interface MapProps {
   onToggleSelect: (id: number) => void;
   routeResult: RouteResult | null;
   focusedId?: number | null;
+  /** Solo tappe selezionate/percorso visibili — niente cluster */
+  focusMode?: boolean;
 }
 
 export default function ClientMap({
@@ -107,6 +116,7 @@ export default function ClientMap({
   onToggleSelect,
   routeResult,
   focusedId,
+  focusMode = false,
 }: MapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -117,7 +127,23 @@ export default function ClientMap({
   const polylineRef = useRef<L.Polyline | null>(null);
   const pulseMarkerRef = useRef<L.Marker | null>(null);
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const routeStopOrderRef = useRef<globalThis.Map<number, number>>(new globalThis.Map());
   const routeStopsKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    const m = new globalThis.Map<number, number>();
+    if (routeResult) {
+      routeResult.steps.forEach((s) => m.set(s.client.id, s.order));
+    }
+    routeStopOrderRef.current = m;
+  }, [routeResult]);
+
+  useEffect(() => {
+    const clusterGroup = clusterGroupRef.current;
+    if (!clusterGroup) return;
+    clusterGroup.options.maxClusterRadius = focusMode ? 1 : 50;
+    clusterGroup.refreshClusters();
+  }, [focusMode, clients]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -202,16 +228,17 @@ export default function ClientMap({
     if (toAdd.length > 0) clusterGroup.addLayers(toAdd);
   }, [clients, onToggleSelect]);
 
-  // Update icons and popups when selection changes (no marker churn)
+  // Update icons and popups when selection or route order changes
   useEffect(() => {
     markersRef.current.forEach((marker, id) => {
       const client = clientsByIdRef.current.get(id);
       if (!client) return;
       const isSelected = selectedIds.has(id);
-      marker.setIcon(markerIcon(client, isSelected));
+      const stopOrder = routeStopOrderRef.current.get(id);
+      marker.setIcon(markerIcon(client, isSelected, stopOrder));
       marker.setPopupContent(buildPopupHtml(client, isSelected));
     });
-  }, [selectedIds]);
+  }, [selectedIds, routeResult]);
 
   useEffect(() => {
     const map = mapRef.current;
