@@ -282,8 +282,8 @@ ${qrBlock}
   }
 
   return (
-    <div className="absolute inset-x-3 top-3 md:inset-x-auto md:right-4 md:w-[min(100vw-1.5rem,26rem)] z-[1000] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden max-h-[calc(100vh-5rem)] flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white shrink-0">
+    <div className="absolute inset-x-3 top-16 md:inset-x-auto md:right-4 md:top-[4.5rem] md:w-[min(100vw-1.5rem,26rem)] z-[1000] bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200/80 overflow-hidden max-h-[calc(100vh-6rem)] flex flex-col">
+      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shrink-0">
         <div className="flex items-center gap-2 font-semibold text-sm">
           <Navigation size={16} />
           Percorso

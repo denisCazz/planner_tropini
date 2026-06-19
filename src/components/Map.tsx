@@ -34,8 +34,10 @@ function telHref(raw: string): string {
 
 const iconCache = new Map<string, L.DivIcon>();
 
-function makeIcon(color: string, label?: string) {
-  const key = `${color}:${label ?? ""}`;
+function makeIcon(color: string, label: string | undefined, clientId: number) {
+  // Ogni marker deve avere la propria istanza DivIcon: Leaflet riusa il DOM
+  // e una cache condivisa fa apparire selezionati tutti i pin con stesso colore/stato.
+  const key = `${clientId}:${color}:${label ?? ""}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
@@ -63,7 +65,7 @@ const STATO_COLORS: Record<string, string> = {
 
 const HOME_ICON = L.divIcon({
   html: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-    <circle cx="16" cy="16" r="14" fill="#2563eb" stroke="white" stroke-width="2"/>
+    <circle cx="16" cy="16" r="14" fill="#4f46e5" stroke="white" stroke-width="2"/>
     <path d="M16 8 L24 15 L22 15 L22 24 L18 24 L18 19 L14 19 L14 24 L10 24 L10 15 L8 15 Z" fill="white"/>
   </svg>`,
   className: "",
@@ -85,7 +87,8 @@ function buildPopupHtml(client: Client, isSelected: boolean): string {
 
 function markerIcon(client: Client, isSelected: boolean) {
   const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#6b7280");
-  return makeIcon(color, isSelected ? "✓" : (client.urgente ? "!" : undefined));
+  const label = isSelected ? "✓" : client.urgente ? "!" : undefined;
+  return makeIcon(color, label, client.id);
 }
 
 interface MapProps {
@@ -142,7 +145,7 @@ export default function ClientMap({
         const r = size / 2 - 2;
         return L.divIcon({
           html: `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-            <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#2563eb" stroke="white" stroke-width="2.5" opacity="0.92"/>
+            <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#4f46e5" stroke="white" stroke-width="2.5" opacity="0.92"/>
             <text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" font-size="${count < 100 ? 13 : 10}" font-weight="bold" fill="white" font-family="sans-serif">${count}</text>
           </svg>`,
           className: "",
@@ -189,7 +192,10 @@ export default function ClientMap({
         icon: markerIcon(client, false),
       });
       marker.bindPopup(buildPopupHtml(client, false));
-      marker.on("click", () => onToggleSelect(client.id));
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        onToggleSelect(client.id);
+      });
       markersRef.current.set(client.id, marker);
       toAdd.push(marker);
     });
@@ -233,11 +239,11 @@ export default function ClientMap({
 
     const pulseIcon = L.divIcon({
       html: `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="32" cy="32" r="16" fill="none" stroke="#2563eb" stroke-width="3">
+        <circle cx="32" cy="32" r="16" fill="none" stroke="#4f46e5" stroke-width="3">
           <animate attributeName="r" values="16;30" dur="1.2s" repeatCount="indefinite"/>
           <animate attributeName="opacity" values="0.9;0" dur="1.2s" repeatCount="indefinite"/>
         </circle>
-        <circle cx="32" cy="32" r="10" fill="none" stroke="#2563eb" stroke-width="2">
+        <circle cx="32" cy="32" r="10" fill="none" stroke="#4f46e5" stroke-width="2">
           <animate attributeName="r" values="10;24" dur="1.2s" begin="0.4s" repeatCount="indefinite"/>
           <animate attributeName="opacity" values="0.7;0" dur="1.2s" begin="0.4s" repeatCount="indefinite"/>
         </circle>
@@ -298,7 +304,7 @@ export default function ClientMap({
     }
 
     const polyline = L.polyline(routeResult.geometry, {
-      color: "#2563eb",
+        color: "#4f46e5",
       weight: 4,
       opacity: 0.8,
     });

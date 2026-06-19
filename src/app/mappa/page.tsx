@@ -1,32 +1,23 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Search, Navigation, X, MapPin, Users, Target, Loader2 } from "lucide-react";
+import { Users, Loader2, List } from "lucide-react";
 import { toast } from "sonner";
 import type { Client, Settings, RouteResult, StatoCliente } from "@/types/client";
 import RoutePanel from "@/components/RoutePanel";
+import MapTopBar from "@/components/mappa/MapTopBar";
+import ClientListPanel from "@/components/mappa/ClientListPanel";
+import NearestRoutePrompt from "@/components/mappa/NearestRoutePrompt";
 
 const ClientMap = dynamic(() => import("@/components/Map"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-100 text-gray-400">
-      Caricamento mappa...
+    <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-400">
+      <Loader2 size={24} className="animate-spin text-indigo-400" />
     </div>
   ),
 });
-
-const STATO_LABELS: Record<StatoCliente, string> = {
-  ATTIVO: "Attivo",
-  INATTIVO: "Inattivo",
-  PROSPECT: "Non categorizzato",
-};
-
-const STATO_DOT: Record<StatoCliente, string> = {
-  ATTIVO: "bg-green-500",
-  INATTIVO: "bg-red-500",
-  PROSPECT: "bg-yellow-500",
-};
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371;
@@ -40,96 +31,29 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-interface ClientRowProps {
-  client: Client;
-  isSelected: boolean;
-  nearestCount: number;
-  onFocus: (id: number) => void;
-  onToggleSelect: (id: number) => void;
-  onNearestRoute: (client: Client) => void;
-  compact?: boolean;
-}
-
-const ClientRow = memo(function ClientRow({
-  client: c,
-  isSelected,
-  nearestCount,
-  onFocus,
-  onToggleSelect,
-  onNearestRoute,
-  compact = false,
-}: ClientRowProps) {
+function MapLegend() {
   return (
-    <div
-      className={`flex items-start gap-2.5 px-3 ${compact ? "py-3" : "py-2.5"} border-b border-gray-50 transition-colors ${
-        isSelected ? "bg-blue-50" : "hover:bg-gray-50"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggleSelect(c.id);
-        }}
-        className={`${compact ? "w-5 h-5 mt-0.5" : "w-4 h-4 mt-0.5"} rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          isSelected ? "bg-blue-600 border-blue-600" : "border-gray-300 hover:border-blue-400"
-        }`}
-        aria-label={isSelected ? "Deseleziona cliente" : "Seleziona cliente"}
-      >
-        {isSelected && (
-          <svg viewBox="0 0 10 8" fill="none" className={compact ? "w-3 h-3" : "w-2.5 h-2.5"}>
-            <path
-              d="M1 4l2.5 2.5L9 1"
-              stroke="white"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        )}
-      </button>
-
-      <button
-        type="button"
-        onClick={() => onFocus(c.id)}
-        className="min-w-0 flex-1 text-left"
-        title="Centra sulla mappa"
-      >
-        <div className="flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
-          <span className="text-sm font-medium text-gray-900 truncate">
-            <span className="font-semibold">{c.cognome}</span>
-            {c.cognome && c.nome ? " " : ""}
-            {c.nome}
-          </span>
-        </div>
-        {c.indirizzo && (
-          <div className="flex items-center gap-1 mt-0.5">
-            {c.lat && c.lng ? (
-              <MapPin size={10} className="text-gray-400 shrink-0" />
-            ) : (
-              <MapPin size={10} className="text-red-300 shrink-0" />
-            )}
-            <span className="text-xs text-gray-400 truncate">{c.indirizzo}</span>
+    <div className="absolute bottom-4 left-4 z-[400] hidden sm:block pointer-events-none">
+      <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-slate-200/80 px-3 py-2.5 space-y-1.5">
+        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+          Legenda
+        </p>
+        {[
+          { color: "bg-emerald-500", label: "Attivo" },
+          { color: "bg-slate-400", label: "Inattivo" },
+          { color: "bg-amber-500", label: "Non categorizzato" },
+          { color: "bg-red-500", label: "Urgente" },
+          { color: "bg-indigo-600", label: "Selezionato ✓" },
+        ].map(({ color, label }) => (
+          <div key={label} className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${color} ring-2 ring-white shadow-sm`} />
+            <span className="text-[11px] text-slate-600">{label}</span>
           </div>
-        )}
-      </button>
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onNearestRoute(c);
-        }}
-        className={`shrink-0 flex items-center gap-1 ${compact ? "px-2 py-1.5 rounded-lg" : "px-1.5 py-1 rounded-md"} bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-600 transition-colors`}
-        title={`Percorso: ${c.nome} + ${nearestCount} clienti più vicini`}
-      >
-        <Target size={compact ? 13 : 11} />
-        <span className="text-[10px] font-semibold">{nearestCount} vicini</span>
-      </button>
+        ))}
+      </div>
     </div>
   );
-});
+}
 
 export default function MappaPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -145,7 +69,10 @@ export default function MappaPage() {
   const [calculating, setCalculating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [nearestPrompt, setNearestPrompt] = useState<Client | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevSelectedSizeRef = useRef(0);
 
   const filteredIdSet = useMemo(() => new Set(filtered.map((c) => c.id)), [filtered]);
 
@@ -158,11 +85,6 @@ export default function MappaPage() {
     }
     return Array.from(byId.values());
   }, [clients, filtered, selectedIds]);
-
-  const selectedOutOfFilter = useMemo(
-    () => [...selectedIds].filter((id) => !filteredIdSet.has(id)).length,
-    [selectedIds, filteredIdSet]
-  );
 
   useEffect(() => {
     Promise.all([
@@ -232,6 +154,25 @@ export default function MappaPage() {
     setRouteResult(null);
   }, []);
 
+  // Popup vicini: solo al passaggio da 0 a 1 cliente selezionato
+  useEffect(() => {
+    const prev = prevSelectedSizeRef.current;
+    const curr = selectedIds.size;
+    if (prev === 0 && curr === 1) {
+      const onlyId = [...selectedIds][0];
+      const client = clients.find((c) => c.id === onlyId);
+      if (client) {
+        if (client.lat != null && client.lng != null) {
+          setNearestPrompt(client);
+        } else {
+          toast.error(`${client.cognome} ${client.nome} non ha coordinate sulla mappa`);
+        }
+      }
+    }
+    if (curr === 0) setNearestPrompt(null);
+    prevSelectedSizeRef.current = curr;
+  }, [selectedIds, clients]);
+
   const focusClient = useCallback((id: number) => {
     setFocusedId(id);
   }, []);
@@ -281,12 +222,13 @@ export default function MappaPage() {
   function clearSelection() {
     setSelectedIds(new Set());
     setRouteResult(null);
+    setNearestPrompt(null);
   }
 
-  const handleNearestRoute = useCallback(
+  const runNearestRoute = useCallback(
     async (pivot: Client) => {
       if (pivot.lat == null || pivot.lng == null) {
-        toast.error(`${pivot.nome} non ha coordinate — aggiungi un indirizzo geocodificato`);
+        toast.error("Cliente senza coordinate — verifica l'indirizzo");
         return;
       }
       const others = clients.filter((c) => c.id !== pivot.id && c.lat !== null && c.lng !== null);
@@ -303,363 +245,161 @@ export default function MappaPage() {
       const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
       setSelectedIds(ids);
       setRouteResult(null);
+      setNearestPrompt(null);
       setSheetOpen(false);
-      toast.info(`Calcolo percorso con ${pivot.nome} + ${nearest.length} clienti vicini...`);
+      toast.info(`Percorso con ${pivot.cognome} + ${nearest.length} clienti vicini...`);
       await calculateRoute(ids);
     },
     [clients, nearestCount]
   );
 
   const clientsOnMap = mapClients.filter((c) => c.lat !== null && c.lng !== null).length;
-
   const sharePhone = process.env.NEXT_PUBLIC_SHARE_PHONE;
 
-  const panelInner = (
-    <>
-      <div className="p-3 border-b border-gray-100 space-y-2 shrink-0">
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            className="w-full border border-gray-200 rounded-md pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Cerca..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+  return (
+    <div className="flex flex-col h-full min-h-0 bg-slate-100">
+      <MapTopBar
+        search={search}
+        onSearchChange={setSearch}
+        statoFilter={statoFilter}
+        onStatoFilterChange={setStatoFilter}
+        urgenteOnly={urgenteOnly}
+        onUrgenteOnlyChange={setUrgenteOnly}
+        selectedCount={selectedIds.size}
+        clientsOnMap={clientsOnMap}
+        totalUrgenti={totalUrgenti}
+        filteredCount={filtered.length}
+        calculating={calculating}
+        onCalculateRoute={() => calculateRoute()}
+        onClearSelection={clearSelection}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+      />
+
+      <div className="flex flex-1 min-h-0">
+        {sidebarOpen && (
+          <aside className="hidden md:flex w-[19rem] shrink-0 border-r border-slate-200/80">
+            <ClientListPanel
+              filtered={filtered}
+              clients={clients}
+              selectedIds={selectedIds}
+              filteredIdSet={filteredIdSet}
+              onFocus={focusClient}
+              onToggleSelect={toggleSelect}
+            />
+          </aside>
+        )}
+
+        <div className="flex-1 relative min-w-0">
+          {loading && (
+            <div className="absolute inset-0 z-[500] bg-slate-50/90 backdrop-blur-sm flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 size={32} className="text-indigo-500 animate-spin" />
+                <span className="text-sm text-slate-500">Caricamento clienti...</span>
+              </div>
+            </div>
+          )}
+
+          {calculating && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-white/95 backdrop-blur-sm shadow-lg rounded-full px-4 py-2 border border-indigo-100">
+              <Loader2 size={16} className="text-indigo-600 animate-spin" />
+              <span className="text-sm font-medium text-slate-800">Calcolo percorso...</span>
+            </div>
+          )}
+
+          <ClientMap
+            clients={mapClients}
+            settings={settings}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            routeResult={routeResult}
+            focusedId={focusedId}
           />
-        </div>
-        <div className="flex flex-wrap gap-1">
+
+          <MapLegend />
+
           <button
             type="button"
-            onClick={() => setStatoFilter("")}
-            className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
-              statoFilter === ""
-                ? "bg-blue-600 text-white border-blue-600"
-                : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
-            }`}
+            className="md:hidden absolute bottom-20 right-4 z-[600] flex items-center gap-2 bg-indigo-600 active:bg-indigo-700 text-white shadow-xl shadow-indigo-600/25 rounded-2xl px-4 py-3 text-sm font-semibold"
+            onClick={() => setSheetOpen(true)}
           >
-            Tutti
+            <List size={16} />
+            {selectedIds.size > 0
+              ? `${selectedIds.size} selezionat${selectedIds.size === 1 ? "o" : "i"}`
+              : `Clienti (${filtered.length})`}
           </button>
-          {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatoFilter(s)}
-              className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
-                statoFilter === s
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
-              }`}
-            >
-              {STATO_LABELS[s]}
-            </button>
-          ))}
+
+          {routeResult && (
+            <RoutePanel
+              result={routeResult}
+              onClose={() => setRouteResult(null)}
+              sharePhone={sharePhone}
+              settings={settings}
+              onVisitsLogged={reloadClients}
+              onVisitOrderChange={applyVisitOrder}
+            />
+          )}
         </div>
-        <button
-          onClick={() => setUrgenteOnly((v) => !v)}
-          className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md border transition-colors ${
-            urgenteOnly
-              ? "bg-red-600 border-red-600 text-white"
-              : "border-gray-200 text-gray-500 hover:border-red-400 hover:text-red-500"
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-current" />
-          Solo urgenti
-        </button>
       </div>
 
-      <div className="p-3 border-b border-gray-100 space-y-2 shrink-0">
-        {selectedIds.size > 0 ? (
-          <>
-            <div className="text-xs text-blue-600 font-medium">
-              {selectedIds.size} cliente{selectedIds.size !== 1 ? "i" : ""} selezionat
-              {selectedIds.size !== 1 ? "i" : "o"}
-              {selectedOutOfFilter > 0 && (
-                <span className="text-blue-400 font-normal">
-                  {" "}
-                  · {selectedOutOfFilter} visibil{selectedOutOfFilter === 1 ? "e" : "i"} sulla mappa
+      {nearestPrompt && (
+        <NearestRoutePrompt
+          client={nearestPrompt}
+          nearestCount={nearestCount}
+          onConfirm={() => runNearestRoute(nearestPrompt)}
+          onDismiss={() => setNearestPrompt(null)}
+        />
+      )}
+
+      {sheetOpen && (
+        <>
+          <div
+            className="md:hidden fixed inset-0 z-[700] bg-slate-900/40 backdrop-blur-[2px]"
+            onClick={() => setSheetOpen(false)}
+          />
+          <div
+            className="md:hidden fixed inset-x-0 bottom-14 z-[800] bg-slate-50 rounded-t-2xl shadow-2xl border-t border-slate-200 flex flex-col"
+            style={{ height: "65vh" }}
+          >
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-slate-300" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-indigo-600" />
+                <span className="font-semibold text-sm text-slate-900">
+                  Clienti ({filtered.length})
                 </span>
+              </div>
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    calculateRoute();
+                    setSheetOpen(false);
+                  }}
+                  disabled={calculating}
+                  className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg"
+                >
+                  Calcola percorso
+                </button>
               )}
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => calculateRoute()}
-                disabled={calculating}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium py-1.5 rounded-md transition-colors"
-              >
-                <Navigation size={12} />
-                {calculating ? "Calcolo..." : "Percorso ottimale"}
-              </button>
-              <button
-                onClick={clearSelection}
-                className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200 transition-colors"
-                title="Cancella selezione"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          </>
-        ) : (
-          <p className="text-xs text-gray-400">
-            Usa la casella per selezionare · clic sul nome per centrare la mappa
-          </p>
-        )}
-      </div>
-
-      {selectedIds.size > 0 && (
-        <div className="border-b border-blue-100 bg-blue-50 shrink-0">
-          <div className="px-3 pt-2 pb-1 text-xs font-semibold text-blue-700 uppercase tracking-wide">
-            Selezionati ({selectedIds.size})
-          </div>
-          <div className="max-h-36 overflow-y-auto">
-            {clients
-              .filter((c) => selectedIds.has(c.id))
-              .map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between px-3 py-1.5 hover:bg-blue-100 transition-colors"
-                >
-                  <button
-                    type="button"
-                    onClick={() => focusClient(c.id)}
-                    className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
-                    title="Centra sulla mappa"
-                  >
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
-                    <span className="text-xs text-blue-900 font-medium truncate">
-                      <span className="font-semibold">{c.cognome}</span>
-                      {c.cognome && c.nome ? " " : ""}
-                      {c.nome}
-                    </span>
-                    {!filteredIdSet.has(c.id) && (
-                      <span className="text-[10px] text-blue-400 shrink-0">fuori filtro</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSelect(c.id);
-                    }}
-                    className="ml-2 shrink-0 text-blue-300 hover:text-red-500 transition-colors"
-                    title="Rimuovi dalla selezione"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
-
-      <div className="px-3 py-2 border-b border-gray-100 flex gap-3 text-xs text-gray-500 shrink-0">
-        <span>
-          {clientsOnMap} su mappa
-          {mapClients.length > filtered.length && (
-            <span className="text-blue-500"> (+{mapClients.length - filtered.length} selezionati)</span>
-          )}
-        </span>
-        <span>•</span>
-        <span className="text-red-500">{totalUrgenti} urgenti</span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="px-3 py-1.5 bg-orange-50 border-b border-orange-100 flex items-center gap-1.5 text-[10px] text-orange-700">
-          <Target size={10} className="shrink-0" />
-          <span>
-            <strong>{nearestCount} vicini</strong> — percorso ottimale con questo cliente più i{" "}
-            {nearestCount} più vicini
-          </span>
-        </div>
-        {filtered.map((c) => (
-          <ClientRow
-            key={c.id}
-            client={c}
-            isSelected={selectedIds.has(c.id)}
-            nearestCount={nearestCount}
-            onFocus={focusClient}
-            onToggleSelect={toggleSelect}
-            onNearestRoute={handleNearestRoute}
-          />
-        ))}
-        {filtered.length === 0 && (
-          <div className="p-6 text-center text-xs text-gray-400">Nessun cliente trovato</div>
-        )}
-      </div>
-    </>
-  );
-
-  return (
-    <div className="flex h-full">
-      <div className="hidden md:flex w-72 shrink-0 flex-col border-r border-gray-200 bg-white">
-        {panelInner}
-      </div>
-
-      <div className="flex-1 relative">
-        {loading && (
-          <div className="absolute inset-0 z-[500] bg-white/80 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-8 h-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
-              <span className="text-sm text-gray-500">Caricamento clienti...</span>
-            </div>
-          </div>
-        )}
-
-        {calculating && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-white/95 backdrop-blur-sm shadow-lg rounded-full px-4 py-2 border border-blue-100">
-            <Loader2 size={16} className="text-blue-600 animate-spin" />
-            <span className="text-sm font-medium text-gray-800">Calcolo percorso...</span>
-          </div>
-        )}
-
-        <ClientMap
-          clients={mapClients}
-          settings={settings}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          routeResult={routeResult}
-          focusedId={focusedId}
-        />
-
-        <button
-          className="md:hidden absolute bottom-20 right-4 z-[600] flex items-center gap-2 bg-blue-600 active:bg-blue-700 text-white shadow-lg rounded-2xl px-4 py-3 text-sm font-semibold"
-          onClick={() => setSheetOpen(true)}
-        >
-          <Users size={16} />
-          {selectedIds.size > 0
-            ? `${selectedIds.size} selezionat${selectedIds.size === 1 ? "o" : "i"}`
-            : `Clienti (${filtered.length})`}
-        </button>
-
-        {routeResult && (
-          <RoutePanel
-            result={routeResult}
-            onClose={() => setRouteResult(null)}
-            sharePhone={sharePhone}
-            settings={settings}
-            onVisitsLogged={reloadClients}
-            onVisitOrderChange={applyVisitOrder}
-          />
-        )}
-      </div>
-
-      {sheetOpen && (
-        <div
-          className="md:hidden fixed inset-0 z-[700] bg-black/40"
-          onClick={() => setSheetOpen(false)}
-        />
-      )}
-
-      {sheetOpen && (
-        <div
-          className="md:hidden fixed inset-x-0 bottom-14 z-[800] bg-white rounded-t-2xl shadow-2xl"
-          style={{ height: "70vh" }}
-        >
-          <div className="flex justify-center pt-3 pb-2">
-            <div className="w-10 h-1 rounded-full bg-gray-300" />
-          </div>
-
-          <div className="flex items-center justify-between px-4 pb-2 border-b border-gray-100">
-            <span className="font-semibold text-sm text-gray-900">Clienti ({filtered.length})</span>
-            <button onClick={() => setSheetOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
-              <X size={16} />
-            </button>
-          </div>
-
-          <div className="px-3 pt-2 pb-2 space-y-2 border-b border-gray-100">
-            <div className="relative">
-              <Search
-                size={13}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
-              />
-              <input
-                className="w-full border border-gray-200 rounded-md pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Cerca..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div className="flex flex-wrap gap-1">
-              <button
-                type="button"
-                onClick={() => setStatoFilter("")}
-                className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
-                  statoFilter === ""
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
-                }`}
-              >
-                Tutti
-              </button>
-              {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStatoFilter(s)}
-                  className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
-                    statoFilter === s
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  {STATO_LABELS[s]}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setUrgenteOnly((v) => !v)}
-              className={`w-full flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 rounded-md border transition-colors ${
-                urgenteOnly
-                  ? "bg-red-600 border-red-600 text-white"
-                  : "border-gray-200 text-gray-500 hover:border-red-400 hover:text-red-500"
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-current" />
-              Solo urgenti
-            </button>
-          </div>
-
-          {selectedIds.size > 0 && (
-            <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100">
-              <span className="text-xs text-blue-600 font-medium flex-1">
-                {selectedIds.size} selezionat{selectedIds.size === 1 ? "o" : "i"}
-              </span>
-              <button
-                onClick={() => {
-                  calculateRoute();
+            <div className="flex-1 min-h-0">
+              <ClientListPanel
+                filtered={filtered}
+                clients={clients}
+                selectedIds={selectedIds}
+                filteredIdSet={filteredIdSet}
+                onFocus={(id) => {
+                  focusClient(id);
                   setSheetOpen(false);
                 }}
-                disabled={calculating}
-                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-md"
-              >
-                <Navigation size={12} />
-                {calculating ? "Calcolo..." : "Percorso"}
-              </button>
-              <button onClick={clearSelection} className="p-1.5 rounded-md bg-gray-100 hover:bg-gray-200">
-                <X size={14} />
-              </button>
-            </div>
-          )}
-
-          <div className="overflow-y-auto overscroll-contain" style={{ height: "calc(70vh - 180px)" }}>
-            {filtered.map((c) => (
-              <ClientRow
-                key={c.id}
-                client={c}
-                isSelected={selectedIds.has(c.id)}
-                nearestCount={nearestCount}
-                onFocus={focusClient}
                 onToggleSelect={toggleSelect}
-                onNearestRoute={(client) => {
-                  setSheetOpen(false);
-                  handleNearestRoute(client);
-                }}
-                compact
               />
-            ))}
-            {filtered.length === 0 && (
-              <div className="py-10 text-center text-sm text-gray-400">Nessun cliente trovato</div>
-            )}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
