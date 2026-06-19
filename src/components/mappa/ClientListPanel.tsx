@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { MapPin, Target, X } from "lucide-react";
+import { MapPin, X } from "lucide-react";
 import type { Client, StatoCliente } from "@/types/client";
 
 const STATO_DOT: Record<StatoCliente, string> = {
@@ -10,28 +10,18 @@ const STATO_DOT: Record<StatoCliente, string> = {
   PROSPECT: "bg-amber-500",
 };
 
-const STATO_RING: Record<StatoCliente, string> = {
-  ATTIVO: "ring-emerald-500/20",
-  INATTIVO: "ring-slate-400/20",
-  PROSPECT: "ring-amber-500/20",
-};
-
 interface ClientRowProps {
   client: Client;
   isSelected: boolean;
-  nearestCount: number;
   onFocus: (id: number) => void;
   onToggleSelect: (id: number) => void;
-  onNearestRoute: (client: Client) => void;
 }
 
 export const ClientRow = memo(function ClientRow({
   client: c,
   isSelected,
-  nearestCount,
   onFocus,
   onToggleSelect,
-  onNearestRoute,
 }: ClientRowProps) {
   return (
     <div
@@ -50,7 +40,7 @@ export const ClientRow = memo(function ClientRow({
           }}
           className={`w-[18px] h-[18px] rounded-md shrink-0 border-2 flex items-center justify-center transition-all ${
             isSelected
-              ? "bg-indigo-600 border-indigo-600 scale-100"
+              ? "bg-indigo-600 border-indigo-600"
               : "border-slate-300 hover:border-indigo-400 group-hover:border-slate-400"
           }`}
           aria-label={isSelected ? "Deseleziona" : "Seleziona"}
@@ -75,14 +65,13 @@ export const ClientRow = memo(function ClientRow({
           title="Centra sulla mappa"
         >
           <div className="flex items-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full shrink-0 ring-2 ${STATO_DOT[c.stato]} ${STATO_RING[c.stato]}`}
-            />
+            <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
             <span className="text-sm font-medium text-slate-900 truncate">
               <span className="font-semibold">{c.cognome}</span>
               {c.cognome && c.nome ? " " : ""}
               {c.nome}
             </span>
+            <span className="text-[10px] text-slate-400 shrink-0">#{c.id}</span>
           </div>
           {c.indirizzo && (
             <div className="flex items-center gap-1 mt-0.5 pl-4">
@@ -94,19 +83,6 @@ export const ClientRow = memo(function ClientRow({
             </div>
           )}
         </button>
-
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onNearestRoute(c);
-          }}
-          className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200/80 text-amber-700 transition-colors opacity-80 group-hover:opacity-100"
-          title={`${nearestCount} clienti più vicini`}
-        >
-          <Target size={12} />
-          <span className="text-[10px] font-bold">{nearestCount}</span>
-        </button>
       </div>
     </div>
   );
@@ -117,10 +93,8 @@ interface ClientListPanelProps {
   clients: Client[];
   selectedIds: Set<number>;
   filteredIdSet: Set<number>;
-  nearestCount: number;
   onFocus: (id: number) => void;
   onToggleSelect: (id: number) => void;
-  onNearestRoute: (client: Client) => void;
 }
 
 export default function ClientListPanel({
@@ -128,10 +102,8 @@ export default function ClientListPanel({
   clients,
   selectedIds,
   filteredIdSet,
-  nearestCount,
   onFocus,
   onToggleSelect,
-  onNearestRoute,
 }: ClientListPanelProps) {
   const selectedClients = clients.filter((c) => selectedIds.has(c.id));
 
@@ -149,41 +121,41 @@ export default function ClientListPanel({
           </div>
           <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto panel-scroll">
             {selectedClients.map((c) => (
-              <button
+              <div
                 key={c.id}
-                type="button"
-                onClick={() => onFocus(c.id)}
-                className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-lg bg-indigo-100/80 hover:bg-indigo-200/80 text-xs font-medium text-indigo-900 transition-colors max-w-full"
+                className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-lg bg-indigo-100/80 text-xs font-medium text-indigo-900 max-w-full"
               >
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
-                <span className="truncate">
-                  {c.cognome} {c.nome}
-                </span>
-                {!filteredIdSet.has(c.id) && (
-                  <span className="text-[9px] text-indigo-400 shrink-0">· filtro</span>
-                )}
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleSelect(c.id);
-                  }}
-                  className="ml-0.5 p-0.5 rounded hover:bg-indigo-300/50 text-indigo-400 hover:text-red-500"
+                  onClick={() => onFocus(c.id)}
+                  className="inline-flex items-center gap-1 min-w-0 hover:opacity-80"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
+                  <span className="truncate">
+                    {c.cognome} {c.nome}
+                  </span>
+                  {!filteredIdSet.has(c.id) && (
+                    <span className="text-[9px] text-indigo-400 shrink-0">· filtro</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggleSelect(c.id)}
+                  className="p-0.5 rounded hover:bg-indigo-300/50 text-indigo-400 hover:text-red-500"
                   aria-label="Rimuovi"
                 >
                   <X size={11} />
                 </button>
-              </button>
+              </div>
             ))}
           </div>
         </div>
       )}
 
-      <div className="px-3 py-2 shrink-0">
-        <p className="text-[11px] text-slate-500 leading-relaxed">
+      <div className="px-3 py-2 shrink-0 border-b border-slate-100">
+        <p className="text-[11px] text-slate-500">
           <span className="font-medium text-slate-600">Casella</span> = seleziona ·{" "}
-          <span className="font-medium text-slate-600">Nome</span> = centra mappa ·{" "}
-          <Target size={10} className="inline text-amber-600" /> = percorso vicini
+          <span className="font-medium text-slate-600">Nome</span> = centra sulla mappa
         </p>
       </div>
 
@@ -191,7 +163,7 @@ export default function ClientListPanel({
         {filtered.length === 0 ? (
           <div className="mx-3 mt-4 p-6 text-center rounded-xl bg-white border border-dashed border-slate-200">
             <p className="text-sm text-slate-500">Nessun cliente trovato</p>
-            <p className="text-xs text-slate-400 mt-1">Prova a modificare i filtri</p>
+            <p className="text-xs text-slate-400 mt-1">Modifica ricerca o filtri nella barra in alto</p>
           </div>
         ) : (
           filtered.map((c) => (
@@ -199,10 +171,8 @@ export default function ClientListPanel({
               key={c.id}
               client={c}
               isSelected={selectedIds.has(c.id)}
-              nearestCount={nearestCount}
               onFocus={onFocus}
               onToggleSelect={onToggleSelect}
-              onNearestRoute={onNearestRoute}
             />
           ))
         )}

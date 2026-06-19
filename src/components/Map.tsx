@@ -34,8 +34,10 @@ function telHref(raw: string): string {
 
 const iconCache = new Map<string, L.DivIcon>();
 
-function makeIcon(color: string, label?: string) {
-  const key = `${color}:${label ?? ""}`;
+function makeIcon(color: string, label: string | undefined, clientId: number) {
+  // Ogni marker deve avere la propria istanza DivIcon: Leaflet riusa il DOM
+  // e una cache condivisa fa apparire selezionati tutti i pin con stesso colore/stato.
+  const key = `${clientId}:${color}:${label ?? ""}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
@@ -85,7 +87,8 @@ function buildPopupHtml(client: Client, isSelected: boolean): string {
 
 function markerIcon(client: Client, isSelected: boolean) {
   const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#6b7280");
-  return makeIcon(color, isSelected ? "✓" : (client.urgente ? "!" : undefined));
+  const label = isSelected ? "✓" : client.urgente ? "!" : undefined;
+  return makeIcon(color, label, client.id);
 }
 
 interface MapProps {
@@ -189,7 +192,10 @@ export default function ClientMap({
         icon: markerIcon(client, false),
       });
       marker.bindPopup(buildPopupHtml(client, false));
-      marker.on("click", () => onToggleSelect(client.id));
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        onToggleSelect(client.id);
+      });
       markersRef.current.set(client.id, marker);
       toAdd.push(marker);
     });

@@ -8,6 +8,7 @@ import type { Client, Settings, RouteResult, StatoCliente } from "@/types/client
 import RoutePanel from "@/components/RoutePanel";
 import MapTopBar from "@/components/mappa/MapTopBar";
 import ClientListPanel from "@/components/mappa/ClientListPanel";
+import NearestRoutePrompt from "@/components/mappa/NearestRoutePrompt";
 
 const ClientMap = dynamic(() => import("@/components/Map"), {
   ssr: false,
@@ -32,7 +33,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 function MapLegend() {
   return (
-    <div className="absolute bottom-4 left-4 z-[400] hidden sm:block">
+    <div className="absolute bottom-4 left-4 z-[400] hidden sm:block pointer-events-none">
       <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-slate-200/80 px-3 py-2.5 space-y-1.5">
         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
           Legenda
@@ -69,7 +70,9 @@ export default function MappaPage() {
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [nearestPrompt, setNearestPrompt] = useState<Client | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevSelectedSizeRef = useRef(0);
 
   const filteredIdSet = useMemo(() => new Set(filtered.map((c) => c.id)), [filtered]);
 
@@ -151,6 +154,25 @@ export default function MappaPage() {
     setRouteResult(null);
   }, []);
 
+  // Popup vicini: solo al passaggio da 0 a 1 cliente selezionato
+  useEffect(() => {
+    const prev = prevSelectedSizeRef.current;
+    const curr = selectedIds.size;
+    if (prev === 0 && curr === 1) {
+      const onlyId = [...selectedIds][0];
+      const client = clients.find((c) => c.id === onlyId);
+      if (client) {
+        if (client.lat != null && client.lng != null) {
+          setNearestPrompt(client);
+        } else {
+          toast.error(`${client.cognome} ${client.nome} non ha coordinate sulla mappa`);
+        }
+      }
+    }
+    if (curr === 0) setNearestPrompt(null);
+    prevSelectedSizeRef.current = curr;
+  }, [selectedIds, clients]);
+
   const focusClient = useCallback((id: number) => {
     setFocusedId(id);
   }, []);
@@ -200,12 +222,13 @@ export default function MappaPage() {
   function clearSelection() {
     setSelectedIds(new Set());
     setRouteResult(null);
+    setNearestPrompt(null);
   }
 
-  const handleNearestRoute = useCallback(
+  const runNearestRoute = useCallback(
     async (pivot: Client) => {
       if (pivot.lat == null || pivot.lng == null) {
-        toast.error(`${pivot.nome} non ha coordinate — aggiungi un indirizzo geocodificato`);
+        toast.error("Cliente senza coordinate — verifica l'indirizzo");
         return;
       }
       const others = clients.filter((c) => c.id !== pivot.id && c.lat !== null && c.lng !== null);
@@ -222,8 +245,9 @@ export default function MappaPage() {
       const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
       setSelectedIds(ids);
       setRouteResult(null);
+      setNearestPrompt(null);
       setSheetOpen(false);
-      toast.info(`Calcolo percorso con ${pivot.nome} + ${nearest.length} clienti vicini...`);
+      toast.info(`Percorso con ${pivot.cognome} + ${nearest.length} clienti vicini...`);
       await calculateRoute(ids);
     },
     [clients, nearestCount]
@@ -254,16 +278,14 @@ export default function MappaPage() {
 
       <div className="flex flex-1 min-h-0">
         {sidebarOpen && (
-          <aside className="hidden md:flex w-[19rem] shrink-0 border-r border-slate-200/80 bg-slate-50/80">
+          <aside className="hidden md:flex w-[19rem] shrink-0 border-r border-slate-200/80">
             <ClientListPanel
               filtered={filtered}
               clients={clients}
               selectedIds={selectedIds}
               filteredIdSet={filteredIdSet}
-              nearestCount={nearestCount}
               onFocus={focusClient}
               onToggleSelect={toggleSelect}
-              onNearestRoute={handleNearestRoute}
             />
           </aside>
         )}
@@ -320,7 +342,15 @@ export default function MappaPage() {
         </div>
       </div>
 
-      {/* Mobile sheet */}
+      {nearestPrompt && (
+        <NearestRoutePrompt
+          client={nearestPrompt}
+          nearestCount={nearestCount}
+          onConfirm={() => runNearestRoute(nearestPrompt)}
+          onDismiss={() => setNearestPrompt(null)}
+        />
+      )}
+
       {sheetOpen && (
         <>
           <div
@@ -329,7 +359,7 @@ export default function MappaPage() {
           />
           <div
             className="md:hidden fixed inset-x-0 bottom-14 z-[800] bg-slate-50 rounded-t-2xl shadow-2xl border-t border-slate-200 flex flex-col"
-            style={{ height: "72vh" }}
+            style={{ height: "65vh" }}
           >
             <div className="flex justify-center pt-3 pb-1">
               <div className="w-10 h-1 rounded-full bg-slate-300" />
@@ -361,16 +391,11 @@ export default function MappaPage() {
                 clients={clients}
                 selectedIds={selectedIds}
                 filteredIdSet={filteredIdSet}
-                nearestCount={nearestCount}
                 onFocus={(id) => {
                   focusClient(id);
                   setSheetOpen(false);
                 }}
                 onToggleSelect={toggleSelect}
-                onNearestRoute={(client) => {
-                  setSheetOpen(false);
-                  handleNearestRoute(client);
-                }}
               />
             </div>
           </div>
