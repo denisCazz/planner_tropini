@@ -45,3 +45,15 @@ model Settings {
   /// Clienti più vicini inclusi dal tasto sulla mappa (1–20)
   nearestNeighbours   Int     @default(4)
 }
+
+model RouteHistory {
+  id            Int      @id @default(autoincrement())
+  createdAt     DateTime @default(now())
+  /// Ordine di visita (id clienti)
+  clientIds     Int[]
+  /// Etichetta leggibile, es. "Baravalle M. → Rossi L. (+3)"
+  label         String
+  totalDistance Float
+  totalDuration Int
+  stopCount     Int
+}

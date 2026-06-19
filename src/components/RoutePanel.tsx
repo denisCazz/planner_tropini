@@ -5,7 +5,6 @@ import type { RouteResult, RouteStep, Settings, StatoCliente } from "@/types/cli
 import {
   Navigation,
   Clock,
-  Ruler,
   X,
   Printer,
   MessageCircle,
@@ -282,98 +281,47 @@ ${qrBlock}
   }
 
   return (
-    <div className="absolute inset-x-3 top-16 md:inset-x-auto md:right-4 md:top-[4.5rem] md:w-[min(100vw-1.5rem,26rem)] z-[1000] bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200/80 overflow-hidden max-h-[calc(100vh-6rem)] flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shrink-0">
-        <div className="flex items-center gap-2 font-semibold text-sm">
-          <Navigation size={16} />
+    <div className="fixed inset-x-0 bottom-0 md:absolute md:inset-x-auto md:right-3 md:top-20 md:bottom-auto md:w-80 z-[1000] bg-white border border-slate-200 md:rounded-xl overflow-hidden flex flex-col max-h-[70vh] md:max-h-[calc(100vh-6rem)] shadow-lg">
+      <div className="flex items-center justify-between px-3 py-2.5 bg-indigo-600 text-white shrink-0">
+        <div className="flex items-center gap-2 font-medium text-sm">
+          <Navigation size={15} />
           Percorso
+          <span className="text-indigo-200 font-normal">
+            {result.totalDistance} km · ~{result.totalDuration} min
+          </span>
         </div>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/20 transition-colors">
+        <button onClick={onClose} className="p-1 rounded hover:bg-white/20">
           <X size={16} />
         </button>
       </div>
 
-      <div className="flex divide-x divide-gray-100 border-b border-gray-100 bg-gray-50 shrink-0">
-        <div className="flex-1 flex flex-col items-center py-3 gap-0.5">
-          <Ruler size={13} className="text-gray-400" />
-          <span className="text-base font-bold text-gray-900">{result.totalDistance} km</span>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wide">distanza</span>
-        </div>
-        <div className="flex-1 flex flex-col items-center py-3 gap-0.5">
-          <Clock size={13} className="text-gray-400" />
-          <span className="text-base font-bold text-gray-900">~{result.totalDuration} min</span>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wide">tempo</span>
-        </div>
-        <div className="flex-1 flex flex-col items-center py-3 gap-0.5">
-          <Navigation size={13} className="text-gray-400" />
-          <span className="text-base font-bold text-gray-900">{steps.length}</span>
-          <span className="text-[10px] text-gray-400 uppercase tracking-wide">tappe</span>
-        </div>
-      </div>
-
-      <p className="text-[10px] text-gray-500 px-3 py-2 border-b border-gray-100 bg-amber-50/80 shrink-0 leading-snug">
-        Riordina con le frecce: la mappa si aggiorna dopo un attimo. Imposta l&apos;orario previsto per ogni tappa: viene incluso in stampa e in WhatsApp (Google Maps apre solo il tragitto nell&apos;ordine corretto).
-      </p>
-
-      <div className="px-3 py-2 border-b border-gray-100 shrink-0">
+      <div className="flex gap-2 px-3 py-2 border-b border-slate-100 shrink-0">
         <button
           type="button"
           onClick={() => void handleMarkVisitsToday()}
           disabled={visitBusy}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-semibold disabled:opacity-50 transition-colors"
+          className="flex-1 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium disabled:opacity-50"
         >
-          <Calendar size={14} />
-          {visitBusy ? "Salvataggio..." : "Segna visita oggi (tutte le tappe)"}
+          <Calendar size={12} className="inline mr-1" />
+          {visitBusy ? "..." : "Visita oggi"}
         </button>
-      </div>
-
-      <div className="px-3 py-3 border-b border-gray-100 space-y-2 shrink-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Condividi percorso</p>
-        <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={handleGoogleMaps}
-            className="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-100 hover:border-blue-300 transition-colors group"
-            title="Apri in Google Maps con tutte le tappe nell'ordine impostato"
-          >
-            <div className="w-8 h-8 rounded-lg bg-white shadow-sm border border-blue-100 flex items-center justify-center group-hover:shadow transition-shadow">
-              <Map size={16} className="text-blue-600" />
-            </div>
-            <span className="text-[10px] font-semibold text-blue-700 leading-tight text-center">Google<br/>Maps</span>
-          </button>
-
-          <button
-            onClick={handleWhatsApp}
-            className="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-green-50 hover:bg-green-100 border border-green-100 hover:border-green-300 transition-colors group"
-            title={sharePhone ? `Invia su WhatsApp a ${sharePhone}` : "Condividi su WhatsApp"}
-          >
-            <div className="w-8 h-8 rounded-lg bg-white shadow-sm border border-green-100 flex items-center justify-center group-hover:shadow transition-shadow">
-              <MessageCircle size={16} className="text-green-600" />
-            </div>
-            <span className="text-[10px] font-semibold text-green-700 leading-tight text-center">
-              WhatsApp<br/>
-              {sharePhone ? <span className="font-normal text-green-500">→ contatto</span> : <span className="font-normal text-green-500">condividi</span>}
-            </span>
-          </button>
-
-          <button
-            onClick={() => void handlePrint()}
-            className="flex flex-col items-center gap-1.5 py-3 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-100 hover:border-orange-300 transition-colors group"
-            title="Stampa itinerario PDF"
-          >
-            <div className="w-8 h-8 rounded-lg bg-white shadow-sm border border-orange-100 flex items-center justify-center group-hover:shadow transition-shadow">
-              <Printer size={16} className="text-orange-600" />
-            </div>
-            <span className="text-[10px] font-semibold text-orange-700 leading-tight text-center">Stampa<br/>PDF</span>
-          </button>
-        </div>
+        <button onClick={handleGoogleMaps} className="p-2 rounded-lg bg-slate-50 border border-slate-200" title="Google Maps">
+          <Map size={15} className="text-blue-600" />
+        </button>
+        <button onClick={handleWhatsApp} className="p-2 rounded-lg bg-slate-50 border border-slate-200" title="WhatsApp">
+          <MessageCircle size={15} className="text-green-600" />
+        </button>
+        <button onClick={() => void handlePrint()} className="p-2 rounded-lg bg-slate-50 border border-slate-200" title="Stampa">
+          <Printer size={15} className="text-orange-600" />
+        </button>
       </div>
 
       <ol className="divide-y divide-gray-50 overflow-y-auto flex-1 min-h-0">
         {steps.map(({ client, order }, index) => {
           const addr = [client.indirizzo, client.citta].filter(Boolean).join(", ");
           return (
-            <li key={client.id} className="flex items-start gap-2 px-3 py-2">
-              <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-1">
+            <li key={client.id} className="flex items-start gap-2 px-3 py-2.5">
+              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                 {order}
               </span>
               <div className="flex flex-col gap-0.5 shrink-0 pt-0.5">
