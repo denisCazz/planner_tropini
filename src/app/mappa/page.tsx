@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react";
 import dynamic from "next/dynamic";
-import { Search, Navigation, X, MapPin, Users, Target, Route } from "lucide-react";
+import { Search, Navigation, X, MapPin, Users, Target, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Client, Settings, RouteResult, StatoCliente } from "@/types/client";
 import RoutePanel from "@/components/RoutePanel";
@@ -40,6 +40,97 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+interface ClientRowProps {
+  client: Client;
+  isSelected: boolean;
+  nearestCount: number;
+  onFocus: (id: number) => void;
+  onToggleSelect: (id: number) => void;
+  onNearestRoute: (client: Client) => void;
+  compact?: boolean;
+}
+
+const ClientRow = memo(function ClientRow({
+  client: c,
+  isSelected,
+  nearestCount,
+  onFocus,
+  onToggleSelect,
+  onNearestRoute,
+  compact = false,
+}: ClientRowProps) {
+  return (
+    <div
+      className={`flex items-start gap-2.5 px-3 ${compact ? "py-3" : "py-2.5"} border-b border-gray-50 transition-colors ${
+        isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleSelect(c.id);
+        }}
+        className={`${compact ? "w-5 h-5 mt-0.5" : "w-4 h-4 mt-0.5"} rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
+          isSelected ? "bg-blue-600 border-blue-600" : "border-gray-300 hover:border-blue-400"
+        }`}
+        aria-label={isSelected ? "Deseleziona cliente" : "Seleziona cliente"}
+      >
+        {isSelected && (
+          <svg viewBox="0 0 10 8" fill="none" className={compact ? "w-3 h-3" : "w-2.5 h-2.5"}>
+            <path
+              d="M1 4l2.5 2.5L9 1"
+              stroke="white"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onFocus(c.id)}
+        className="min-w-0 flex-1 text-left"
+        title="Centra sulla mappa"
+      >
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
+          <span className="text-sm font-medium text-gray-900 truncate">
+            <span className="font-semibold">{c.cognome}</span>
+            {c.cognome && c.nome ? " " : ""}
+            {c.nome}
+          </span>
+        </div>
+        {c.indirizzo && (
+          <div className="flex items-center gap-1 mt-0.5">
+            {c.lat && c.lng ? (
+              <MapPin size={10} className="text-gray-400 shrink-0" />
+            ) : (
+              <MapPin size={10} className="text-red-300 shrink-0" />
+            )}
+            <span className="text-xs text-gray-400 truncate">{c.indirizzo}</span>
+          </div>
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onNearestRoute(c);
+        }}
+        className={`shrink-0 flex items-center gap-1 ${compact ? "px-2 py-1.5 rounded-lg" : "px-1.5 py-1 rounded-md"} bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-600 transition-colors`}
+        title={`Percorso: ${c.nome} + ${nearestCount} clienti più vicini`}
+      >
+        <Target size={compact ? 13 : 11} />
+        <span className="text-[10px] font-semibold">{nearestCount} vicini</span>
+      </button>
+    </div>
+  );
+});
+
 export default function MappaPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [filtered, setFiltered] = useState<Client[]>([]);
@@ -56,18 +147,37 @@ export default function MappaPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const filteredIdSet = useMemo(() => new Set(filtered.map((c) => c.id)), [filtered]);
+
+  const mapClients = useMemo(() => {
+    const byId = new Map<number, Client>();
+    for (const c of filtered) byId.set(c.id, c);
+    for (const id of selectedIds) {
+      const c = clients.find((x) => x.id === id);
+      if (c) byId.set(id, c);
+    }
+    return Array.from(byId.values());
+  }, [clients, filtered, selectedIds]);
+
+  const selectedOutOfFilter = useMemo(
+    () => [...selectedIds].filter((id) => !filteredIdSet.has(id)).length,
+    [selectedIds, filteredIdSet]
+  );
+
   useEffect(() => {
     Promise.all([
-      fetch("/api/clients?slim=1").then((r) => r.ok ? r.json() : []),
-      fetch("/api/settings").then((r) => r.ok ? r.json() : null),
-    ]).then(([clientsData, settingsData]: [Client[], Settings | null]) => {
-      const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
-      setClients(data);
-      setFiltered(data);
-      setTotalUrgenti(data.filter((c: Client) => c.urgente).length);
-      setSettings(settingsData);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+      fetch("/api/clients?slim=1").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/settings").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([clientsData, settingsData]: [Client[], Settings | null]) => {
+        const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
+        setClients(data);
+        setFiltered(data);
+        setTotalUrgenti(data.filter((c: Client) => c.urgente).length);
+        setSettings(settingsData);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const reloadClients = useCallback(() => {
@@ -76,7 +186,7 @@ export default function MappaPage() {
       .then((clientsData: Client[]) => {
         const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
         setClients(data);
-        setTotalUrgenti(data.filter((c: Client) => c.urgente).length);
+        setTotalUrgenti(data.filter((c) => c.urgente).length);
       })
       .catch(() => {});
   }, []);
@@ -120,6 +230,10 @@ export default function MappaPage() {
       return next;
     });
     setRouteResult(null);
+  }, []);
+
+  const focusClient = useCallback((id: number) => {
+    setFocusedId(id);
   }, []);
 
   async function calculateRoute(idsArg?: Set<number>) {
@@ -169,35 +283,34 @@ export default function MappaPage() {
     setRouteResult(null);
   }
 
-  async function findNearestAndRoute(pivot: Client) {
-    if (pivot.lat == null || pivot.lng == null) {
-      toast.error(`${pivot.nome} non ha coordinate — aggiungi un indirizzo geocodificato`);
-      return;
-    }
-    const others = clients.filter(
-      (c) => c.id !== pivot.id && c.lat !== null && c.lng !== null
-    );
-    if (others.length === 0) {
-      toast.error("Nessun altro cliente con coordinate");
-      return;
-    }
-    const sorted = [...others].sort(
-      (a, b) =>
-        haversineKm(pivot.lat!, pivot.lng!, a.lat!, a.lng!) -
-        haversineKm(pivot.lat!, pivot.lng!, b.lat!, b.lng!)
-    );
-    const nearest = sorted.slice(0, nearestCount);
-    const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
-    setSelectedIds(ids);
-    setRouteResult(null);
-    setSheetOpen(false);
-    toast.info(`Calcolo percorso con ${pivot.nome} + ${nearest.length} clienti vicini...`);
-    await calculateRoute(ids);
-  }
-
-  const clientsWithCoords = filtered.filter(
-    (c) => c.lat !== null && c.lng !== null
+  const handleNearestRoute = useCallback(
+    async (pivot: Client) => {
+      if (pivot.lat == null || pivot.lng == null) {
+        toast.error(`${pivot.nome} non ha coordinate — aggiungi un indirizzo geocodificato`);
+        return;
+      }
+      const others = clients.filter((c) => c.id !== pivot.id && c.lat !== null && c.lng !== null);
+      if (others.length === 0) {
+        toast.error("Nessun altro cliente con coordinate");
+        return;
+      }
+      const sorted = [...others].sort(
+        (a, b) =>
+          haversineKm(pivot.lat!, pivot.lng!, a.lat!, a.lng!) -
+          haversineKm(pivot.lat!, pivot.lng!, b.lat!, b.lng!)
+      );
+      const nearest = sorted.slice(0, nearestCount);
+      const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
+      setSelectedIds(ids);
+      setRouteResult(null);
+      setSheetOpen(false);
+      toast.info(`Calcolo percorso con ${pivot.nome} + ${nearest.length} clienti vicini...`);
+      await calculateRoute(ids);
+    },
+    [clients, nearestCount]
   );
+
+  const clientsOnMap = mapClients.filter((c) => c.lat !== null && c.lng !== null).length;
 
   const sharePhone = process.env.NEXT_PUBLIC_SHARE_PHONE;
 
@@ -205,10 +318,7 @@ export default function MappaPage() {
     <>
       <div className="p-3 border-b border-gray-100 space-y-2 shrink-0">
         <div className="relative">
-          <Search
-            size={14}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
-          />
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             className="w-full border border-gray-200 rounded-md pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Cerca..."
@@ -256,12 +366,18 @@ export default function MappaPage() {
         </button>
       </div>
 
-      {/* Route controls */}
       <div className="p-3 border-b border-gray-100 space-y-2 shrink-0">
         {selectedIds.size > 0 ? (
           <>
             <div className="text-xs text-blue-600 font-medium">
-              {selectedIds.size} cliente{selectedIds.size !== 1 ? "i" : ""} selezionat{selectedIds.size !== 1 ? "i" : "o"}
+              {selectedIds.size} cliente{selectedIds.size !== 1 ? "i" : ""} selezionat
+              {selectedIds.size !== 1 ? "i" : "o"}
+              {selectedOutOfFilter > 0 && (
+                <span className="text-blue-400 font-normal">
+                  {" "}
+                  · {selectedOutOfFilter} visibil{selectedOutOfFilter === 1 ? "e" : "i"} sulla mappa
+                </span>
+              )}
             </div>
             <div className="flex gap-2">
               <button
@@ -283,16 +399,15 @@ export default function MappaPage() {
           </>
         ) : (
           <p className="text-xs text-gray-400">
-            Seleziona clienti per calcolare il percorso
+            Usa la casella per selezionare · clic sul nome per centrare la mappa
           </p>
         )}
       </div>
 
-      {/* Selected clients sub-list */}
       {selectedIds.size > 0 && (
         <div className="border-b border-blue-100 bg-blue-50 shrink-0">
           <div className="px-3 pt-2 pb-1 text-xs font-semibold text-blue-700 uppercase tracking-wide">
-            Selezionati
+            Selezionati ({selectedIds.size})
           </div>
           <div className="max-h-36 overflow-y-auto">
             {clients
@@ -303,17 +418,27 @@ export default function MappaPage() {
                   className="flex items-center justify-between px-3 py-1.5 hover:bg-blue-100 transition-colors"
                 >
                   <button
-                    onClick={() => { setFocusedId(c.id); }}
+                    type="button"
+                    onClick={() => focusClient(c.id)}
                     className="flex items-center gap-1.5 min-w-0 flex-1 text-left"
                     title="Centra sulla mappa"
                   >
                     <span className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
                     <span className="text-xs text-blue-900 font-medium truncate">
-                      <span className="font-semibold">{c.cognome}</span>{c.cognome && c.nome ? " " : ""}{c.nome}
+                      <span className="font-semibold">{c.cognome}</span>
+                      {c.cognome && c.nome ? " " : ""}
+                      {c.nome}
                     </span>
+                    {!filteredIdSet.has(c.id) && (
+                      <span className="text-[10px] text-blue-400 shrink-0">fuori filtro</span>
+                    )}
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); toggleSelect(c.id); }}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSelect(c.id);
+                    }}
                     className="ml-2 shrink-0 text-blue-300 hover:text-red-500 transition-colors"
                     title="Rimuovi dalla selezione"
                   >
@@ -325,92 +450,38 @@ export default function MappaPage() {
         </div>
       )}
 
-      {/* Stats */}
       <div className="px-3 py-2 border-b border-gray-100 flex gap-3 text-xs text-gray-500 shrink-0">
-        <span>{clientsWithCoords.length} su mappa</span>
+        <span>
+          {clientsOnMap} su mappa
+          {mapClients.length > filtered.length && (
+            <span className="text-blue-500"> (+{mapClients.length - filtered.length} selezionati)</span>
+          )}
+        </span>
         <span>•</span>
         <span className="text-red-500">{totalUrgenti} urgenti</span>
       </div>
 
-      {/* Clients list */}
       <div className="flex-1 overflow-y-auto overscroll-contain">
         <div className="px-3 py-1.5 bg-orange-50 border-b border-orange-100 flex items-center gap-1.5 text-[10px] text-orange-700">
           <Target size={10} className="shrink-0" />
           <span>
-            <strong>{nearestCount} vicini</strong> — percorso ottimale con questo cliente più i {nearestCount} più vicini
+            <strong>{nearestCount} vicini</strong> — percorso ottimale con questo cliente più i{" "}
+            {nearestCount} più vicini
           </span>
         </div>
-        {filtered.map((c) => {
-          const isSelected = selectedIds.has(c.id);
-          return (
-            <div
-              key={c.id}
-              onClick={() => { setFocusedId(c.id); toggleSelect(c.id); }}
-              className={`flex items-start gap-2.5 px-3 py-2.5 cursor-pointer border-b border-gray-50 transition-colors ${
-                isSelected ? "bg-blue-50" : "hover:bg-gray-50"
-              }`}
-            >
-              <div
-                className={`w-4 h-4 mt-0.5 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-                  isSelected
-                    ? "bg-blue-600 border-blue-600"
-                    : "border-gray-300"
-                }`}
-              >
-                {isSelected && (
-                  <svg
-                    viewBox="0 0 10 8"
-                    fill="none"
-                    className="w-2.5 h-2.5"
-                  >
-                    <path
-                      d="M1 4l2.5 2.5L9 1"
-                      stroke="white"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className={`w-2 h-2 rounded-full shrink-0 ${STATO_DOT[c.stato]}`}
-                  />
-                  <span className="text-sm font-medium text-gray-900 truncate">
-                    <span className="font-semibold">{c.cognome}</span>{c.cognome && c.nome ? " " : ""}{c.nome}
-                  </span>
-                </div>
-                {c.indirizzo && (
-                  <div className="flex items-center gap-1 mt-0.5">
-                    {c.lat && c.lng ? (
-                      <MapPin size={10} className="text-gray-400 shrink-0" />
-                    ) : (
-                      <MapPin size={10} className="text-red-300 shrink-0" />
-                    )}
-                    <span className="text-xs text-gray-400 truncate">
-                      {c.indirizzo}
-                    </span>
-                  </div>
-                )}
-              </div>
-              {/* N nearest button */}
-              <button
-                onClick={(e) => { e.stopPropagation(); findNearestAndRoute(c); }}
-                className="shrink-0 flex items-center gap-1 px-1.5 py-1 rounded-md bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-600 transition-colors"
-                title={`Percorso: ${c.nome} + ${nearestCount} clienti più vicini`}
-              >
-                <Target size={11} />
-                <span className="text-[10px] font-semibold">{nearestCount} vicini</span>
-              </button>
-            </div>
-          );
-        })}
+        {filtered.map((c) => (
+          <ClientRow
+            key={c.id}
+            client={c}
+            isSelected={selectedIds.has(c.id)}
+            nearestCount={nearestCount}
+            onFocus={focusClient}
+            onToggleSelect={toggleSelect}
+            onNearestRoute={handleNearestRoute}
+          />
+        ))}
         {filtered.length === 0 && (
-          <div className="p-6 text-center text-xs text-gray-400">
-            Nessun cliente trovato
-          </div>
+          <div className="p-6 text-center text-xs text-gray-400">Nessun cliente trovato</div>
         )}
       </div>
     </>
@@ -418,27 +489,10 @@ export default function MappaPage() {
 
   return (
     <div className="flex h-full">
-      {/* ── Loading overlay ── */}
-      {calculating && (
-        <div className="fixed inset-0 z-[2000] bg-black/50 flex flex-col items-center justify-center gap-4">
-          <div className="bg-white rounded-2xl px-8 py-7 flex flex-col items-center gap-4 shadow-2xl">
-            <div className="w-12 h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
-            <div className="flex items-center gap-2 text-gray-800 font-semibold text-sm">
-              <Route size={16} className="text-blue-600" />
-              Calcolo percorso ottimale...
-            </div>
-            <p className="text-xs text-gray-400 text-center max-w-[180px]">
-              Sto ottimizzando l&apos;ordine di visita
-            </p>
-          </div>
-        </div>
-      )}
-      {/* ── Desktop left panel ── */}
       <div className="hidden md:flex w-72 shrink-0 flex-col border-r border-gray-200 bg-white">
         {panelInner}
       </div>
 
-      {/* ── Map ── */}
       <div className="flex-1 relative">
         {loading && (
           <div className="absolute inset-0 z-[500] bg-white/80 flex items-center justify-center">
@@ -448,8 +502,16 @@ export default function MappaPage() {
             </div>
           </div>
         )}
+
+        {calculating && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-white/95 backdrop-blur-sm shadow-lg rounded-full px-4 py-2 border border-blue-100">
+            <Loader2 size={16} className="text-blue-600 animate-spin" />
+            <span className="text-sm font-medium text-gray-800">Calcolo percorso...</span>
+          </div>
+        )}
+
         <ClientMap
-          clients={filtered}
+          clients={mapClients}
           settings={settings}
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
@@ -457,7 +519,6 @@ export default function MappaPage() {
           focusedId={focusedId}
         />
 
-        {/* ── Mobile FAB ── */}
         <button
           className="md:hidden absolute bottom-20 right-4 z-[600] flex items-center gap-2 bg-blue-600 active:bg-blue-700 text-white shadow-lg rounded-2xl px-4 py-3 text-sm font-semibold"
           onClick={() => setSheetOpen(true)}
@@ -480,7 +541,6 @@ export default function MappaPage() {
         )}
       </div>
 
-      {/* ── Mobile sheet backdrop ── */}
       {sheetOpen && (
         <div
           className="md:hidden fixed inset-0 z-[700] bg-black/40"
@@ -488,30 +548,28 @@ export default function MappaPage() {
         />
       )}
 
-      {/* ── Mobile bottom sheet — completamente separato dal panelInner desktop ── */}
       {sheetOpen && (
-        <div className="md:hidden fixed inset-x-0 bottom-14 z-[800] bg-white rounded-t-2xl shadow-2xl"
+        <div
+          className="md:hidden fixed inset-x-0 bottom-14 z-[800] bg-white rounded-t-2xl shadow-2xl"
           style={{ height: "70vh" }}
         >
-          {/* drag handle */}
           <div className="flex justify-center pt-3 pb-2">
             <div className="w-10 h-1 rounded-full bg-gray-300" />
           </div>
 
-          {/* header */}
           <div className="flex items-center justify-between px-4 pb-2 border-b border-gray-100">
-            <span className="font-semibold text-sm text-gray-900">
-              Clienti ({filtered.length})
-            </span>
+            <span className="font-semibold text-sm text-gray-900">Clienti ({filtered.length})</span>
             <button onClick={() => setSheetOpen(false)} className="p-1 rounded-md hover:bg-gray-100">
               <X size={16} />
             </button>
           </div>
 
-          {/* search + filter */}
           <div className="px-3 pt-2 pb-2 space-y-2 border-b border-gray-100">
             <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search
+                size={13}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+              />
               <input
                 className="w-full border border-gray-200 rounded-md pl-8 pr-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Cerca..."
@@ -559,14 +617,16 @@ export default function MappaPage() {
             </button>
           </div>
 
-          {/* route controls */}
           {selectedIds.size > 0 && (
             <div className="px-3 py-2 flex items-center gap-2 border-b border-gray-100">
               <span className="text-xs text-blue-600 font-medium flex-1">
                 {selectedIds.size} selezionat{selectedIds.size === 1 ? "o" : "i"}
               </span>
               <button
-                onClick={() => { calculateRoute(); setSheetOpen(false); }}
+                onClick={() => {
+                  calculateRoute();
+                  setSheetOpen(false);
+                }}
                 disabled={calculating}
                 className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded-md"
               >
@@ -579,49 +639,22 @@ export default function MappaPage() {
             </div>
           )}
 
-          {/* scrollable client list — altezza esplicita calcolata */}
-          <div className="overflow-y-auto overscroll-contain"
-            style={{ height: "calc(70vh - 180px)" }}
-          >
-            {filtered.map((c) => {
-              const isSelected = selectedIds.has(c.id);
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => toggleSelect(c.id)}
-                  className={`flex items-center gap-2.5 px-3 py-3 border-b border-gray-50 active:bg-gray-100 ${
-                    isSelected ? "bg-blue-50" : ""
-                  }`}
-                >
-                  <div className={`w-5 h-5 rounded shrink-0 border-2 flex items-center justify-center ${
-                    isSelected ? "bg-blue-600 border-blue-600" : "border-gray-300"
-                  }`}>
-                    {isSelected && (
-                      <svg viewBox="0 0 10 8" fill="none" className="w-3 h-3">
-                        <path d="M1 4l2.5 2.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${STATO_DOT[c.stato]}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-gray-900 truncate">
-                      <span className="font-semibold">{c.cognome}</span>{c.cognome && c.nome ? " " : ""}{c.nome}
-                    </div>
-                    {c.indirizzo && (
-                      <div className="text-xs text-gray-400 truncate">{c.indirizzo}</div>
-                    )}
-                  </div>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setSheetOpen(false); findNearestAndRoute(c); }}
-                    className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg bg-orange-50 active:bg-orange-100 border border-orange-200 text-orange-600"
-                    title={`Percorso ${nearestCount} più vicini`}
-                  >
-                    <Target size={13} />
-                    <span className="text-[10px] font-semibold">{nearestCount} vicini</span>
-                  </button>
-                </div>
-              );
-            })}
+          <div className="overflow-y-auto overscroll-contain" style={{ height: "calc(70vh - 180px)" }}>
+            {filtered.map((c) => (
+              <ClientRow
+                key={c.id}
+                client={c}
+                isSelected={selectedIds.has(c.id)}
+                nearestCount={nearestCount}
+                onFocus={focusClient}
+                onToggleSelect={toggleSelect}
+                onNearestRoute={(client) => {
+                  setSheetOpen(false);
+                  handleNearestRoute(client);
+                }}
+                compact
+              />
+            ))}
             {filtered.length === 0 && (
               <div className="py-10 text-center text-sm text-gray-400">Nessun cliente trovato</div>
             )}
