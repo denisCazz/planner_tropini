@@ -8,7 +8,6 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Client, Settings, RouteResult } from "@/types/client";
 
-// Fix Leaflet default marker icon in Next.js
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
@@ -33,19 +32,27 @@ function telHref(raw: string): string {
   return `tel:+${d}`;
 }
 
+const iconCache = new Map<string, L.DivIcon>();
+
 function makeIcon(color: string, label?: string) {
+  const key = `${color}:${label ?? ""}`;
+  const cached = iconCache.get(key);
+  if (cached) return cached;
+
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
     <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="${color}" stroke="white" stroke-width="2"/>
     <circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>
     ${label ? `<text x="14" y="18" text-anchor="middle" font-size="9" font-weight="bold" fill="${color}">${label}</text>` : ""}
   </svg>`;
-  return L.divIcon({
+  const icon = L.divIcon({
     html: svg,
     className: "",
     iconSize: [28, 36],
     iconAnchor: [14, 36],
     popupAnchor: [0, -36],
   });
+  iconCache.set(key, icon);
+  return icon;
 }
 
 const STATO_COLORS: Record<string, string> = {
@@ -64,6 +71,22 @@ const HOME_ICON = L.divIcon({
   iconAnchor: [16, 32],
   popupAnchor: [0, -32],
 });
+
+function buildPopupHtml(client: Client, isSelected: boolean): string {
+  return `<div class="min-w-[180px]">
+    <div class="font-bold text-gray-900">${escapeHtml(client.cognome)} ${escapeHtml(client.nome)}</div>
+    ${client.indirizzo ? `<div class="text-xs text-gray-500 mt-1">${escapeHtml(client.indirizzo)}</div>` : ""}
+    ${client.telefono ? `<div class="text-xs text-gray-600 mt-1"><a href="${telHref(client.telefono)}">\uD83D\uDCDE ${escapeHtml(client.telefono)}</a></div>` : ""}
+    <a href="/clienti/${client.id}" class="inline-block mt-2 text-xs text-blue-600 hover:underline">Apri scheda →</a>
+    <br/>
+    <button onclick="window.__toggleClient(${client.id})" class="mt-1 text-xs px-2 py-1 rounded ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}">${isSelected ? "Deseleziona" : "Seleziona per percorso"}</button>
+  </div>`;
+}
+
+function markerIcon(client: Client, isSelected: boolean) {
+  const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#6b7280");
+  return makeIcon(color, isSelected ? "✓" : (client.urgente ? "!" : undefined));
+}
 
 interface MapProps {
   clients: Client[];
@@ -86,12 +109,13 @@ export default function ClientMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const markersRef = useRef<globalThis.Map<number, L.Marker>>(new globalThis.Map());
+  const clientsByIdRef = useRef<globalThis.Map<number, Client>>(new globalThis.Map());
   const homeMarkerRef = useRef<L.Marker | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
   const pulseMarkerRef = useRef<L.Marker | null>(null);
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const routeStopsKeyRef = useRef<string>("");
 
-  // Init map + cluster group
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
@@ -139,14 +163,14 @@ export default function ClientMap({
     };
   }, []);
 
-  // Update client markers
+  // Sync marker set with visible clients (add / remove only when list changes)
   useEffect(() => {
-    const map = mapRef.current;
     const clusterGroup = clusterGroupRef.current;
-    if (!map || !clusterGroup) return;
+    if (!clusterGroup) return;
 
-    // Remove markers no longer in the filtered list
     const currentIds = new Set(clients.map((c) => c.id));
+    clientsByIdRef.current = new globalThis.Map(clients.map((c) => [c.id, c]));
+
     const toRemove: L.Marker[] = [];
     markersRef.current.forEach((marker, id) => {
       if (!currentIds.has(id)) {
@@ -156,40 +180,33 @@ export default function ClientMap({
     });
     if (toRemove.length > 0) clusterGroup.removeLayers(toRemove);
 
-    // Add new markers / update existing icons
     const toAdd: L.Marker[] = [];
     clients.forEach((client) => {
       if (client.lat === null || client.lng === null) return;
+      if (markersRef.current.has(client.id)) return;
 
-      const isSelected = selectedIds.has(client.id);
-      const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#6b7280");
-      const icon = makeIcon(color, isSelected ? "✓" : (client.urgente ? "!" : undefined));
-
-      const existing = markersRef.current.get(client.id);
-      if (existing) {
-        existing.setLatLng([client.lat, client.lng]);
-        existing.setIcon(icon);
-      } else {
-        const marker = L.marker([client.lat, client.lng], { icon });
-        marker.bindPopup(
-          `<div class="min-w-[180px]">
-            <div class="font-bold text-gray-900">${escapeHtml(client.cognome)} ${escapeHtml(client.nome)}</div>
-            ${client.indirizzo ? `<div class="text-xs text-gray-500 mt-1">${escapeHtml(client.indirizzo)}</div>` : ""}
-            ${client.telefono ? `<div class="text-xs text-gray-600 mt-1"><a href="${telHref(client.telefono)}">\uD83D\uDCDE ${escapeHtml(client.telefono)}</a></div>` : ""}
-            <a href="/clienti/${client.id}" class="inline-block mt-2 text-xs text-blue-600 hover:underline">Apri scheda →</a>
-            <br/>
-            <button onclick="window.__toggleClient(${client.id})" class="mt-1 text-xs px-2 py-1 rounded ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}">${isSelected ? "Deseleziona" : "Seleziona per percorso"}</button>
-          </div>`
-        );
-        marker.on("click", () => onToggleSelect(client.id));
-        markersRef.current.set(client.id, marker);
-        toAdd.push(marker);
-      }
+      const marker = L.marker([client.lat, client.lng], {
+        icon: markerIcon(client, false),
+      });
+      marker.bindPopup(buildPopupHtml(client, false));
+      marker.on("click", () => onToggleSelect(client.id));
+      markersRef.current.set(client.id, marker);
+      toAdd.push(marker);
     });
     if (toAdd.length > 0) clusterGroup.addLayers(toAdd);
-  }, [clients, selectedIds, onToggleSelect]);
+  }, [clients, onToggleSelect]);
 
-  // Focus / highlight marker with pulse ring
+  // Update icons and popups when selection changes (no marker churn)
+  useEffect(() => {
+    markersRef.current.forEach((marker, id) => {
+      const client = clientsByIdRef.current.get(id);
+      if (!client) return;
+      const isSelected = selectedIds.has(id);
+      marker.setIcon(markerIcon(client, isSelected));
+      marker.setPopupContent(buildPopupHtml(client, isSelected));
+    });
+  }, [selectedIds]);
+
   useEffect(() => {
     const map = mapRef.current;
     const clusterGroup = clusterGroupRef.current;
@@ -210,12 +227,10 @@ export default function ClientMap({
 
     const latlng = marker.getLatLng();
 
-    // Zoom into cluster and open popup
     clusterGroup.zoomToShowLayer(marker, () => {
       marker.openPopup();
     });
 
-    // Animated SVG pulse ring (centered on pin body)
     const pulseIcon = L.divIcon({
       html: `<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
         <circle cx="32" cy="32" r="16" fill="none" stroke="#2563eb" stroke-width="3">
@@ -229,7 +244,7 @@ export default function ClientMap({
       </svg>`,
       className: "",
       iconSize: [64, 64],
-      iconAnchor: [32, 54], // align ring center with pin body center
+      iconAnchor: [32, 54],
     });
 
     const pulse = L.marker(latlng, { icon: pulseIcon, interactive: false, zIndexOffset: 500 });
@@ -242,12 +257,10 @@ export default function ClientMap({
     }, 3000);
   }, [focusedId]);
 
-  // Expose toggle to popup buttons
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__toggleClient = onToggleSelect;
   }, [onToggleSelect]);
 
-  // Home marker
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -270,7 +283,6 @@ export default function ClientMap({
     }
   }, [settings]);
 
-  // Route polyline
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -280,14 +292,25 @@ export default function ClientMap({
       polylineRef.current = null;
     }
 
-    if (routeResult && routeResult.geometry.length > 0) {
-      const polyline = L.polyline(routeResult.geometry, {
-        color: "#2563eb",
-        weight: 4,
-        opacity: 0.8,
-      });
-      polyline.addTo(map);
-      polylineRef.current = polyline;
+    if (!routeResult || routeResult.geometry.length === 0) {
+      routeStopsKeyRef.current = "";
+      return;
+    }
+
+    const polyline = L.polyline(routeResult.geometry, {
+      color: "#2563eb",
+      weight: 4,
+      opacity: 0.8,
+    });
+    polyline.addTo(map);
+    polylineRef.current = polyline;
+
+    const stopsKey = routeResult.steps
+      .map((s) => s.client.id)
+      .sort((a, b) => a - b)
+      .join(",");
+    if (stopsKey !== routeStopsKeyRef.current) {
+      routeStopsKeyRef.current = stopsKey;
       map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
     }
   }, [routeResult]);
