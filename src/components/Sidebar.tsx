@@ -16,12 +16,14 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Desktop: left icon bar */}
-      <aside className="hidden md:flex w-16 shrink-0 bg-gray-900 flex-col items-center py-4 gap-1">
-        {/* Logo */}
-        <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center mb-4">
+      <aside className="hidden md:flex w-[4.25rem] shrink-0 bg-slate-900 flex-col items-center py-5 gap-1 border-r border-slate-800">
+        <Link
+          href="/dashboard"
+          className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center mb-5 shadow-lg shadow-indigo-900/40 hover:bg-indigo-500 transition-colors"
+          title="Planner Tropini"
+        >
           <Map size={18} className="text-white" />
-        </div>
+        </Link>
 
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
@@ -30,14 +32,14 @@ export default function Sidebar() {
               key={href}
               href={href}
               title={label}
-              className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors group relative ${
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all group relative ${
                 active
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                  ? "bg-white/15 text-white shadow-inner"
+                  : "text-slate-400 hover:bg-white/10 hover:text-white"
               }`}
             >
-              <Icon size={18} />
-              <span className="absolute left-full ml-2 px-2 py-1 bg-gray-800 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50">
+              <Icon size={18} strokeWidth={active ? 2.25 : 2} />
+              <span className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 shadow-lg">
                 {label}
               </span>
             </Link>
@@ -45,8 +47,7 @@ export default function Sidebar() {
         })}
       </aside>
 
-      {/* Mobile: bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-gray-900 flex items-center justify-around h-14 pb-safe">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around h-14 pb-safe">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (
@@ -54,10 +55,10 @@ export default function Sidebar() {
               key={href}
               href={href}
               className={`flex flex-col items-center gap-0.5 px-4 py-1 rounded-lg transition-colors ${
-                active ? "text-blue-400" : "text-gray-400"
+                active ? "text-indigo-400" : "text-slate-500"
               }`}
             >
-              <Icon size={20} />
+              <Icon size={20} strokeWidth={active ? 2.25 : 2} />
               <span className="text-[10px] font-medium">{label}</span>
             </Link>
           );
