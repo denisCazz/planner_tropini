@@ -141,7 +141,8 @@ export default function ClientMap({
   useEffect(() => {
     const clusterGroup = clusterGroupRef.current;
     if (!clusterGroup) return;
-    clusterGroup.options.maxClusterRadius = focusMode ? 1 : 50;
+    (clusterGroup as L.MarkerClusterGroup & { options: { maxClusterRadius: number } }).options
+      .maxClusterRadius = focusMode ? 1 : 50;
     clusterGroup.refreshClusters();
   }, [focusMode, clients]);
 
