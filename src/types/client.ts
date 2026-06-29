@@ -71,6 +71,16 @@ export interface RouteHistoryEntry {
   stopCount: number;
 }
 
+export interface ZoneBounds {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+/** Esito della telefonata di conferma nel flusso "lavora a zona" */
+export type CallStatus = "ok" | "ko";
+
 export interface ImportResult {
   created: number;
   updated: number;

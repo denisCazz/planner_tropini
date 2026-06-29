@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
         urgente: true,
         marcaStufa: true,
         modelloStufa: true,
+        ultimaVisita: true,
         lat: true,
         lng: true,
       },

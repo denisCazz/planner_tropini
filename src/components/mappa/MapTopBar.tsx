@@ -10,6 +10,7 @@ import {
   Loader2,
   History,
   SlidersHorizontal,
+  MapPinned,
 } from "lucide-react";
 import type { StatoCliente } from "@/types/client";
 
@@ -36,6 +37,8 @@ interface MapTopBarProps {
   onOpenHistory: () => void;
   filtersOpen: boolean;
   onToggleFilters: () => void;
+  zoneMode: boolean;
+  onToggleZone: () => void;
 }
 
 export default function MapTopBar({
@@ -55,6 +58,8 @@ export default function MapTopBar({
   onOpenHistory,
   filtersOpen,
   onToggleFilters,
+  zoneMode,
+  onToggleZone,
 }: MapTopBarProps) {
   const filterActive = statoFilter !== "" || urgenteOnly;
 
@@ -101,6 +106,20 @@ export default function MapTopBar({
             onUrgenteOnlyChange={onUrgenteOnlyChange}
           />
         </div>
+
+        <button
+          type="button"
+          onClick={onToggleZone}
+          className={`hidden md:flex items-center gap-1.5 px-3 h-9 rounded-lg border text-xs font-medium shrink-0 transition-colors ${
+            zoneMode
+              ? "bg-indigo-600 border-indigo-600 text-white"
+              : "border-slate-200 text-slate-600 hover:bg-slate-50"
+          }`}
+          title="Lavora a zona: seleziona un'area sulla mappa"
+        >
+          <MapPinned size={16} />
+          Zona
+        </button>
 
         <button
           type="button"
