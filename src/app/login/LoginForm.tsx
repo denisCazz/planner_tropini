@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Map, Lock, Route, Users, Sparkles } from "lucide-react";
+import { Lock, Sparkles, ArrowRight } from "lucide-react";
 
 const DEMO_USERNAME = "demo";
 const DEMO_PASSWORD = "demo1234!";
@@ -56,141 +57,125 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* Pannello branding — desktop */}
-      <div className="hidden lg:flex lg:w-[45%] xl:w-[42%] relative overflow-hidden bg-gradient-to-br from-indigo-700 via-indigo-800 to-slate-900">
-        <div className="absolute inset-0 opacity-20">
-          <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-indigo-400/20 blur-3xl" />
-        </div>
-        <div className="relative z-10 flex flex-col justify-between p-12 xl:p-16 w-full">
-          <div>
-            <div className="inline-flex w-12 h-12 rounded-xl bg-white/10 backdrop-blur items-center justify-center mb-8">
-              <Map size={24} className="text-white" />
-            </div>
-            <h1 className="text-4xl xl:text-5xl font-bold text-white tracking-tight leading-tight">
-              Planner
-              <br />
-              Tropini
-            </h1>
-            <p className="text-indigo-200 text-lg mt-4 max-w-sm leading-relaxed">
-              CRM per agenti di commercio: clienti, mappa e percorsi ottimizzati in un unico strumento.
-            </p>
-          </div>
-
-          <ul className="space-y-5 mt-12">
-            {[
-              { icon: Users, text: "Gestisci clienti e visite sul territorio" },
-              { icon: Map, text: "Visualizza tutto su mappa interattiva" },
-              { icon: Route, text: "Calcola percorsi ottimizzati in un click" },
-            ].map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3 text-indigo-100">
-                <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/10 shrink-0">
-                  <Icon size={18} className="text-white" />
-                </span>
-                <span className="text-sm leading-snug">{text}</span>
-              </li>
-            ))}
-          </ul>
+    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-950">
+      {/* Hero immagine — desktop a sinistra, mobile in alto */}
+      <div className="relative lg:w-[52%] xl:w-[55%] min-h-[220px] sm:min-h-[280px] lg:min-h-screen shrink-0 overflow-hidden">
+        <Image
+          src="/images/login-hero.png"
+          alt="Planner Tropini — ottimizzazione percorsi"
+          fill
+          priority
+          className="object-cover object-center"
+          sizes="(max-width: 1024px) 100vw, 55vw"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-slate-950/90 via-slate-950/40 to-transparent" />
+        <div className="absolute inset-0 hidden lg:flex flex-col justify-end p-10 xl:p-14">
+          <p className="text-cyan-300/90 text-sm font-medium tracking-widest uppercase mb-2">
+            Field sales CRM
+          </p>
+          <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight max-w-md">
+            Clienti, mappa e percorsi ottimizzati
+          </h1>
+          <p className="text-slate-300/80 text-sm mt-3 max-w-sm leading-relaxed">
+            Pianifica le visite sul territorio con percorsi intelligenti e una mappa interattiva.
+          </p>
         </div>
       </div>
 
-      {/* Form login */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-slate-50">
-        <div className="w-full max-w-md">
-          {/* Logo mobile */}
-          <div className="lg:hidden text-center mb-8">
-            <div className="inline-flex w-14 h-14 rounded-2xl bg-indigo-600 items-center justify-center shadow-lg shadow-indigo-600/30 mb-4">
-              <Map size={28} className="text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900">Planner Tropini</h1>
-            <p className="text-slate-500 text-sm mt-1">Accedi al tuo account</p>
+      {/* Pannello login */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-12 bg-slate-950 lg:bg-slate-900/50">
+        <div className="w-full max-w-[420px]">
+          <div className="lg:hidden mb-6">
+            <h1 className="text-2xl font-bold text-white">Planner Tropini</h1>
+            <p className="text-slate-400 text-sm mt-1">Accedi al tuo account</p>
           </div>
 
-          <div className="lg:mb-8">
-            <h2 className="hidden lg:block text-2xl font-bold text-slate-900">Bentornato</h2>
-            <p className="hidden lg:block text-slate-500 mt-1">Inserisci le tue credenziali per accedere</p>
+          <div className="hidden lg:block mb-8">
+            <h2 className="text-2xl font-bold text-white">Bentornato</h2>
+            <p className="text-slate-400 mt-1.5 text-sm">
+              Inserisci le credenziali per accedere all&apos;app
+            </p>
           </div>
 
           <form
             onSubmit={handleSubmit}
-            className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 sm:p-8 space-y-5"
+            className="rounded-2xl border border-slate-800 bg-slate-900/80 backdrop-blur-sm shadow-2xl shadow-black/40 overflow-hidden"
           >
-            <div>
-              <label
-                htmlFor="username"
-                className="block text-sm font-medium text-slate-700 mb-1.5"
-              >
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-colors"
-                placeholder="Il tuo username"
-                required
-              />
+            <div className="p-6 sm:p-8 space-y-5">
+              <div>
+                <label
+                  htmlFor="username"
+                  className="block text-sm font-medium text-slate-300 mb-1.5"
+                >
+                  Username
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/60 focus:border-cyan-500/40 transition-all"
+                  placeholder="Il tuo username"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-slate-300 mb-1.5"
+                >
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-slate-950/60 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/60 focus:border-cyan-500/40 transition-all"
+                  placeholder="La tua password"
+                  required
+                />
+              </div>
+
+              {error && (
+                <p className="text-sm text-red-300 bg-red-950/50 border border-red-800/60 rounded-xl px-4 py-3">
+                  {error}
+                </p>
+              )}
             </div>
 
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-slate-700 mb-1.5"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent focus:bg-white transition-colors"
-                placeholder="La tua password"
-                required
-              />
-            </div>
-
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-                {error}
+            {/* Azioni in basso — non in alto */}
+            <div className="border-t border-slate-800 bg-slate-950/40 px-6 sm:px-8 py-5 space-y-3">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-950 font-semibold py-3 px-4 rounded-xl transition-colors shadow-lg shadow-cyan-500/20"
+                >
+                  <Lock size={16} />
+                  {loading ? "Accesso…" : "Accedi"}
+                  {!loading && <ArrowRight size={16} className="opacity-70" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDemoLogin}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 border border-slate-600 hover:border-cyan-500/50 hover:bg-cyan-500/5 disabled:opacity-60 text-slate-200 font-medium py-3 px-4 rounded-xl transition-all"
+                >
+                  <Sparkles size={16} className="text-cyan-400" />
+                  Prova demo
+                </button>
+              </div>
+              <p className="text-center text-xs text-slate-500">
+                Demo:{" "}
+                <span className="font-mono text-slate-400">demo</span>
+                {" · "}
+                <span className="font-mono text-slate-400">demo1234!</span>
               </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors shadow-sm shadow-indigo-600/20"
-            >
-              <Lock size={16} />
-              {loading ? "Accesso in corso…" : "Accedi"}
-            </button>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-white px-3 text-slate-400">oppure</span>
-              </div>
             </div>
-
-            <button
-              type="button"
-              onClick={handleDemoLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100 border border-amber-200 disabled:opacity-60 text-amber-800 font-medium py-3 rounded-xl transition-colors"
-            >
-              <Sparkles size={16} />
-              Prova la demo
-            </button>
-            <p className="text-center text-xs text-slate-400">
-              Account demo: <span className="font-mono text-slate-500">demo</span> /{" "}
-              <span className="font-mono text-slate-500">demo1234!</span>
-            </p>
           </form>
         </div>
       </div>
