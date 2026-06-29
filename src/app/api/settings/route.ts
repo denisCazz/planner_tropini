@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/geocode";
+import { requireSession } from "@/lib/tenant";
 
 export async function GET() {
-  let settings = await prisma.settings.findUnique({ where: { id: "default" } });
+  const { session, error } = await requireSession();
+  if (error) return error;
+
+  let settings = await prisma.settings.findUnique({
+    where: { organizationId: session!.organizationId },
+  });
 
   if (!settings) {
-    // Crea settings di default: Via San Giorgio 14, Cavallermaggiore
     settings = await prisma.settings.create({
-      data: {
-        id: "default",
-        startLat: 44.7089,
-        startLng: 7.6617,
-        startLabel: "Via San Giorgio 14, Cavallermaggiore",
-        nearestNeighbours: 4,
-      },
+      data: { organizationId: session!.organizationId },
     });
   }
 
@@ -22,6 +21,9 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const body = await req.json();
   const { startLabel, nearestNeighbours: nnRaw } = body;
 
@@ -40,7 +42,6 @@ export async function PUT(req: NextRequest) {
     nearestNeighbours = n;
   }
 
-  // Se viene fornito solo il label, geocodifica
   if (startLabel && (startLat === undefined || startLng === undefined)) {
     const geo = await geocodeAddress(startLabel);
     if (!geo) {
@@ -54,7 +55,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const settings = await prisma.settings.upsert({
-    where: { id: "default" },
+    where: { organizationId: session!.organizationId },
     update: {
       ...(startLat !== undefined && { startLat }),
       ...(startLng !== undefined && { startLng }),
@@ -62,7 +63,7 @@ export async function PUT(req: NextRequest) {
       ...(nearestNeighbours !== undefined && { nearestNeighbours }),
     },
     create: {
-      id: "default",
+      organizationId: session!.organizationId,
       startLat: startLat ?? 44.7089,
       startLng: startLng ?? 7.6617,
       startLabel: startLabel ?? "Via San Giorgio 14, Cavallermaggiore",

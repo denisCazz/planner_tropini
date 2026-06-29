@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/geocode";
+import { requireSession } from "@/lib/tenant";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
 export async function POST(_req: Request, { params }: RouteParams) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const { id } = await params;
   const clientId = parseInt(id, 10);
   if (Number.isNaN(clientId)) {
     return NextResponse.json({ error: "Id non valido" }, { status: 400 });
   }
 
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
+  const client = await prisma.client.findFirst({
+    where: { id: clientId, organizationId: session!.organizationId },
   });
 
   if (!client) {

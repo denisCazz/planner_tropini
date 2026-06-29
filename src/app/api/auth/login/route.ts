@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  authenticateUser,
   createSessionToken,
   sessionCookieOptions,
-  verifyCredentials,
 } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -30,15 +30,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!verifyCredentials(username, password)) {
+  const session = await authenticateUser(username, password);
+  if (!session) {
     return NextResponse.json(
       { error: "Credenziali non valide" },
       { status: 401 }
     );
   }
 
-  const token = await createSessionToken(username);
-  const response = NextResponse.json({ ok: true });
+  const token = await createSessionToken(session);
+  const response = NextResponse.json({
+    ok: true,
+    role: session.role,
+    organizationName: session.organizationName,
+  });
   const cookie = sessionCookieOptions(token);
   response.cookies.set(cookie.name, cookie.value, {
     httpOnly: cookie.httpOnly,

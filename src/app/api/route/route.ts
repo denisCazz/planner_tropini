@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { optimizeRoute, getRouteGeometry } from "@/lib/ors";
+import { requireSession, orgScope } from "@/lib/tenant";
 import type { Client } from "@/types/client";
 
 export async function POST(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const body = await req.json();
   const { clientIds, visitOrder } = body as {
     clientIds: number[];
@@ -18,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   const clients = await prisma.client.findMany({
-    where: { id: { in: clientIds } },
+    where: { id: { in: clientIds }, ...orgScope(session!.organizationId) },
   });
 
   const clientsWithCoords = clients.filter(
@@ -33,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   const settings = await prisma.settings.findUnique({
-    where: { id: "default" },
+    where: { organizationId: session!.organizationId },
   });
 
   const startLat = settings?.startLat ?? 44.7089;

@@ -1,10 +1,21 @@
-import { timingSafeEqual } from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth-constants";
+import { prisma } from "@/lib/prisma";
+import { verifyPassword } from "@/lib/password";
 
 export { SESSION_COOKIE } from "@/lib/auth-constants";
+
 const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7;
+
+export type SessionPayload = {
+  userId: string;
+  username: string;
+  role: "ADMIN" | "USER";
+  organizationId: string;
+  organizationName: string;
+};
 
 function getSecretKey() {
   const secret = process.env.AUTH_SECRET;
@@ -14,49 +25,61 @@ function getSecretKey() {
   return new TextEncoder().encode(secret);
 }
 
-function safeEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a);
-  const bufB = Buffer.from(b);
-  if (bufA.length !== bufB.length) return false;
-  return timingSafeEqual(bufA, bufB);
+export async function authenticateUser(
+  username: string,
+  password: string
+): Promise<SessionPayload | null> {
+  const user = await prisma.user.findUnique({
+    where: { username: username.trim() },
+    include: { organization: true },
+  });
+
+  if (!user?.organizationId || !user.organization) return null;
+  if (!verifyPassword(password, user.passwordHash)) return null;
+
+  return {
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    organizationId: user.organizationId,
+    organizationName: user.organization.name,
+  };
 }
 
-const DEMO_USERNAME = "demo";
-const DEMO_PASSWORD = "demo1234!";
-
-export function verifyCredentials(username: string, password: string): boolean {
-  if (safeEqual(username, DEMO_USERNAME) && safeEqual(password, DEMO_PASSWORD)) {
-    return true;
-  }
-
-  const expectedUser = process.env.AUTH_USERNAME;
-  const expectedPass = process.env.AUTH_PASSWORD;
-  if (!expectedUser || !expectedPass) return false;
-  return safeEqual(username, expectedUser) && safeEqual(password, expectedPass);
-}
-
-export async function createSessionToken(username: string): Promise<string> {
-  return new SignJWT({ username })
+export async function createSessionToken(payload: SessionPayload): Promise<string> {
+  return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DURATION_SECONDS}s`)
     .sign(getSecretKey());
 }
 
-export async function verifySessionToken(
-  token: string
-): Promise<{ username: string } | null> {
+export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
+    const userId = payload.userId;
     const username = payload.username;
-    if (typeof username !== "string") return null;
-    return { username };
+    const role = payload.role;
+    const organizationId = payload.organizationId;
+    const organizationName = payload.organizationName;
+
+    if (
+      typeof userId !== "string" ||
+      typeof username !== "string" ||
+      (role !== "ADMIN" && role !== "USER") ||
+      typeof organizationId !== "string" ||
+      typeof organizationName !== "string"
+    ) {
+      return null;
+    }
+
+    return { userId, username, role, organizationId, organizationName };
   } catch {
     return null;
   }
 }
 
-export async function getSession(): Promise<{ username: string } | null> {
+export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -73,4 +96,12 @@ export function sessionCookieOptions(token: string) {
     path: "/",
     maxAge: SESSION_DURATION_SECONDS,
   };
+}
+
+export function unauthorizedResponse() {
+  return NextResponse.json({ error: "Non autorizzato" }, { status: 401 });
+}
+
+export function forbiddenResponse() {
+  return NextResponse.json({ error: "Accesso negato" }, { status: 403 });
 }
