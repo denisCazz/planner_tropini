@@ -7,53 +7,91 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 enum StatoCliente {
   ATTIVO
   INATTIVO
   PROSPECT
 }
 
+enum UserRole {
+  ADMIN
+  USER
+}
+
+model Organization {
+  id           String         @id @default(cuid())
+  name         String
+  slug         String         @unique
+  isDemo       Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  users        User[]
+  clients      Client[]
+  settings     Settings?
+  routeHistory RouteHistory[]
+}
+
+model User {
+  id             String        @id @default(cuid())
+  username       String        @unique
+  passwordHash   String
+  role           UserRole      @default(USER)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
 model Client {
-  id           Int          @id @default(autoincrement())
-  nome         String
-  cognome      String       @default("")
-  email        String?
-  telefono     String?
-  telefono2    String?
-  indirizzo    String?
-  cap          String?
-  citta        String?
-  provincia    String?
-  marcaStufa   String?
-  modelloStufa String?
-  note         String?
-  stato        StatoCliente @default(PROSPECT)
-  urgente      Boolean      @default(false)
-  ultimaVisita DateTime?
-  lat          Float?
-  lng          Float?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id             Int          @id @default(autoincrement())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nome           String
+  cognome        String       @default("")
+  email          String?
+  telefono       String?
+  telefono2      String?
+  indirizzo      String?
+  cap            String?
+  citta          String?
+  provincia      String?
+  marcaStufa     String?
+  modelloStufa   String?
+  note           String?
+  stato          StatoCliente @default(PROSPECT)
+  urgente        Boolean      @default(false)
+  ultimaVisita   DateTime?
+  lat            Float?
+  lng            Float?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
 }
 
 model Settings {
-  id                  String  @id @default("default")
-  startLat            Float   @default(44.7089)
-  startLng            Float   @default(7.6617)
-  startLabel          String  @default("Via San Giorgio 14, Cavallermaggiore")
+  id                String       @id @default(cuid())
+  organizationId    String       @unique
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  startLat          Float        @default(44.7089)
+  startLng          Float        @default(7.6617)
+  startLabel        String       @default("Via San Giorgio 14, Cavallermaggiore")
   /// Clienti più vicini inclusi dal tasto sulla mappa (1–20)
-  nearestNeighbours   Int     @default(4)
+  nearestNeighbours Int          @default(4)
 }
 
 model RouteHistory {
-  id            Int      @id @default(autoincrement())
-  createdAt     DateTime @default(now())
+  id             Int          @id @default(autoincrement())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
   /// Ordine di visita (id clienti)
-  clientIds     Int[]
+  clientIds      Int[]
   /// Etichetta leggibile, es. "Baravalle M. → Rossi L. (+3)"
-  label         String
-  totalDistance Float
-  totalDuration Int
-  stopCount     Int
+  label          String
+  totalDistance  Float
+  totalDuration  Int
+  stopCount      Int
+
+  @@index([organizationId])
 }

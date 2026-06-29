@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSession, orgScope } from "@/lib/tenant";
 
 function buildLabel(names: string[], stopCount: number): string {
   if (names.length === 0) return `${stopCount} tappe`;
@@ -9,8 +10,12 @@ function buildLabel(names: string[], stopCount: number): string {
 }
 
 export async function GET() {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   try {
     const rows = await prisma.routeHistory.findMany({
+      where: orgScope(session!.organizationId),
       orderBy: { createdAt: "desc" },
       take: 50,
     });
@@ -31,6 +36,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   try {
     const body = await req.json();
     const { clientIds, totalDistance, totalDuration } = body as {
@@ -44,7 +52,7 @@ export async function POST(req: NextRequest) {
     }
 
     const clients = await prisma.client.findMany({
-      where: { id: { in: clientIds } },
+      where: { id: { in: clientIds }, ...orgScope(session!.organizationId) },
       select: { id: true, nome: true, cognome: true },
     });
     const byId = new Map(clients.map((c) => [c.id, c]));
@@ -57,6 +65,7 @@ export async function POST(req: NextRequest) {
 
     const entry = await prisma.routeHistory.create({
       data: {
+        organizationId: session!.organizationId,
         clientIds,
         label: buildLabel(names, clientIds.length),
         totalDistance,
@@ -65,8 +74,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Tieni al massimo 50 voci
     const all = await prisma.routeHistory.findMany({
+      where: orgScope(session!.organizationId),
       orderBy: { createdAt: "desc" },
       select: { id: true },
     });

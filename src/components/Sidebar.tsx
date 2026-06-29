@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
-import { Map, Users, Settings, LayoutDashboard, LogOut } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Map, Users, Settings, LayoutDashboard, LogOut, Building2 } from "lucide-react";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -12,9 +13,23 @@ const NAV = [
   { href: "/impostazioni", label: "Impostazioni", icon: Settings },
 ];
 
+type SessionInfo = {
+  username: string;
+  role: "ADMIN" | "USER";
+  organizationName: string;
+};
+
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [session, setSession] = useState<SessionInfo | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setSession)
+      .catch(() => setSession(null));
+  }, [pathname]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -22,19 +37,37 @@ export default function Sidebar() {
     router.refresh();
   }
 
+  const navItems = [
+    ...NAV,
+    ...(session?.role === "ADMIN"
+      ? [{ href: "/admin/societa", label: "Società", icon: Building2 }]
+      : []),
+  ];
+
   return (
     <>
       <aside className="hidden md:flex w-[4.25rem] shrink-0 bg-slate-900 flex-col items-center py-5 gap-1 border-r border-slate-800">
         <Link
           href="/dashboard"
-          className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center mb-5 shadow-lg shadow-indigo-900/40 hover:bg-indigo-500 transition-colors"
-          title="Planner Tropini"
+          className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center mb-3 shadow-lg shadow-indigo-900/40 hover:bg-indigo-500 transition-colors"
+          title="Planner"
         >
           <Map size={18} className="text-white" />
         </Link>
 
+        {session && (
+          <div
+            className="mb-3 px-1 text-center"
+            title={`${session.organizationName} · ${session.username}`}
+          >
+            <span className="block text-[9px] font-bold uppercase tracking-wider text-cyan-400/90 truncate max-w-[3.5rem]">
+              {session.organizationName.slice(0, 8)}
+            </span>
+          </div>
+        )}
+
         <div className="flex flex-col gap-1 flex-1">
-          {NAV.map(({ href, label, icon: Icon }) => {
+          {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
               <Link
@@ -70,13 +103,13 @@ export default function Sidebar() {
       </aside>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around h-14 pb-safe">
-        {NAV.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-0.5 px-4 py-1 rounded-lg transition-colors ${
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors ${
                 active ? "text-indigo-400" : "text-slate-500"
               }`}
             >

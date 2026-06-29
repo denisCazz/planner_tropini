@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSession, orgScope } from "@/lib/tenant";
 
 export async function POST(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const body = await req.json();
   const { clientIds, visitedAt } = body as {
     clientIds?: unknown;
@@ -33,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await prisma.client.updateMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, ...orgScope(session!.organizationId) },
     data: { ultimaVisita: date },
   });
 

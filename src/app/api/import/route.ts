@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseKmlBuffer } from "@/lib/kml";
+import { requireSession, orgScope } from "@/lib/tenant";
 import type { StatoCliente } from "@/types/client";
 
 // Allow up to 5 minutes for large imports
@@ -18,6 +19,9 @@ async function runInBatches<T>(
 }
 
 export async function POST(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
 
@@ -51,6 +55,7 @@ export async function POST(req: NextRequest) {
 
   // Load all existing clients once — avoids N×findFirst round-trips
   const existingClients = await prisma.client.findMany({
+    where: orgScope(session!.organizationId),
     select: { id: true, nome: true, lat: true, lng: true, cognome: true, telefono: true, telefono2: true, indirizzo: true, cap: true, citta: true, provincia: true, marcaStufa: true, modelloStufa: true, note: true, ultimaVisita: true },
   });
 
@@ -90,6 +95,7 @@ export async function POST(req: NextRequest) {
     try {
       const result = await prisma.client.createMany({
         data: toCreate.map((item) => ({
+          organizationId: session!.organizationId,
           nome: item.nome,
           cognome: item.cognome ?? "",
           email: null,

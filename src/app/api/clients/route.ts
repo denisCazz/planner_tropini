@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/geocode";
+import { requireSession, orgScope } from "@/lib/tenant";
 import type { StatoCliente } from "@/types/client";
 
 export async function GET(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const { searchParams } = new URL(req.url);
   const stato = searchParams.get("stato") as StatoCliente | null;
   const search = searchParams.get("search") ?? "";
-  // ?slim=1 → solo campi necessari per la mappa (molto più veloce)
   const slim = searchParams.get("slim") === "1";
 
   const where = {
+    ...orgScope(session!.organizationId),
     ...(stato ? { stato } : {}),
     ...(search
       ? {
@@ -66,6 +70,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const body = await req.json();
 
   const {
@@ -103,6 +110,7 @@ export async function POST(req: NextRequest) {
 
   const client = await prisma.client.create({
     data: {
+      organizationId: session!.organizationId,
       nome,
       cognome: cognome ?? "",
       email: email || null,

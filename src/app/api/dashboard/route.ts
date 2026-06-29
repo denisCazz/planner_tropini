@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSession, orgScope } from "@/lib/tenant";
 
 export async function GET(req: NextRequest) {
+  const { session, error } = await requireSession();
+  if (error) return error;
+
   const { searchParams } = new URL(req.url);
   const mesi = Math.max(1, parseInt(searchParams.get("mesi") ?? "6"));
+  const org = orgScope(session!.organizationId);
 
   const now = new Date();
   const thresholdDate = new Date(now);
@@ -23,15 +28,15 @@ export async function GET(req: NextRequest) {
     topBrands,
     recentiCount,
   ] = await Promise.all([
-    prisma.client.count(),
-    prisma.client.groupBy({ by: ["stato"], _count: { _all: true } }),
-    prisma.client.count({ where: { urgente: true } }),
-    prisma.client.count({ where: { ultimaVisita: null } }),
+    prisma.client.count({ where: org }),
+    prisma.client.groupBy({ by: ["stato"], where: org, _count: { _all: true } }),
+    prisma.client.count({ where: { ...org, urgente: true } }),
+    prisma.client.count({ where: { ...org, ultimaVisita: null } }),
     prisma.client.count({
-      where: { ultimaVisita: { lt: thresholdDate } },
+      where: { ...org, ultimaVisita: { lt: thresholdDate } },
     }),
     prisma.client.findMany({
-      where: { urgente: true },
+      where: { ...org, urgente: true },
       select: {
         id: true, nome: true, cognome: true,
         telefono: true, citta: true, indirizzo: true,
@@ -42,6 +47,7 @@ export async function GET(req: NextRequest) {
     }),
     prisma.client.findMany({
       where: {
+        ...org,
         stato: "ATTIVO",
         OR: [
           { ultimaVisita: null },
@@ -57,13 +63,13 @@ export async function GET(req: NextRequest) {
     }),
     prisma.client.groupBy({
       by: ["marcaStufa"],
-      where: { marcaStufa: { not: null } },
+      where: { ...org, marcaStufa: { not: null } },
       _count: { _all: true },
       orderBy: { _count: { marcaStufa: "desc" } },
       take: 12,
     }),
     prisma.client.count({
-      where: { createdAt: { gte: thirtyDaysAgo } },
+      where: { ...org, createdAt: { gte: thirtyDaysAgo } },
     }),
   ]);
 
