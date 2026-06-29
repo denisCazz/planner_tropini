@@ -33,17 +33,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-
-# Copy Prisma CLI + client engines needed for migrate deploy at startup
-# Use node_modules/prisma directly (avoids .bin/ WASM path issues)
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-
-# Leverage output traces to reduce image size
+# Standalone first — include server.js e node_modules tracciati
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+
+# Prisma DOPO standalone (altrimenti viene sovrascritto)
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/scripts ./scripts
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 USER nextjs
 
@@ -52,7 +51,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# ─── Healthcheck ──────────────────────────────────────────────
 HEALTHCHECK \
   --interval=30s \
   --timeout=10s \
@@ -60,5 +58,5 @@ HEALTHCHECK \
   --retries=3 \
   CMD curl -f http://localhost:3000/api/health || exit 1
 
-# Run migrations then start the app
-CMD node node_modules/prisma/build/index.js migrate deploy && node server.js
+# Migrazioni automatiche all'avvio, poi app
+CMD node scripts/db-migrate.mjs && node server.js

@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:seed": "node prisma/seed.mjs"
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:generate": "node node_modules/prisma/build/index.js generate",
+    "db:seed": "node prisma/seed.mjs",
+    "start:prod": "node scripts/db-migrate.mjs && node server.js"
   },
   "dependencies": {
     "@prisma/client": "5.22.0",
