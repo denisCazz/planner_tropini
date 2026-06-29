@@ -1,15 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, useTransition } from "react";
 import dynamic from "next/dynamic";
-import { Users, History, Loader2 } from "lucide-react";
+import { Users, History, Loader2, MapPinned } from "lucide-react";
 import { toast } from "sonner";
-import type { Client, Settings, RouteResult, RouteHistoryEntry, StatoCliente } from "@/types/client";
+import type {
+  Client,
+  Settings,
+  RouteResult,
+  RouteHistoryEntry,
+  StatoCliente,
+  ZoneBounds,
+  CallStatus,
+} from "@/types/client";
 import RoutePanel from "@/components/RoutePanel";
 import MapTopBar from "@/components/mappa/MapTopBar";
 import ClientListPanel from "@/components/mappa/ClientListPanel";
 import NearestRoutePrompt from "@/components/mappa/NearestRoutePrompt";
 import RouteHistoryPanel from "@/components/mappa/RouteHistoryPanel";
+import ZonePanel from "@/components/mappa/ZonePanel";
 
 const ClientMap = dynamic(() => import("@/components/Map"), {
   ssr: false,
@@ -30,6 +39,16 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
       Math.cos((lat2 * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Ordina i clienti di una zona per priorità di visita:
+ *  urgenti prima, poi chi non è mai stato visitato o da più tempo. */
+function zonePriority(a: Client, b: Client): number {
+  if (a.urgente !== b.urgente) return a.urgente ? -1 : 1;
+  const av = a.ultimaVisita ? new Date(a.ultimaVisita).getTime() : 0;
+  const bv = b.ultimaVisita ? new Date(b.ultimaVisita).getTime() : 0;
+  if (av !== bv) return av - bv;
+  return (a.cognome ?? "").localeCompare(b.cognome ?? "", "it");
 }
 
 type MobilePanel = "clients" | "history" | null;
@@ -56,6 +75,15 @@ export default function MappaPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevSelectedSizeRef = useRef(0);
+  const [, startFilterTransition] = useTransition();
+
+  // --- Flusso "lavora a zona" ---
+  const [zoneMode, setZoneMode] = useState(false);
+  const [zoneBounds, setZoneBounds] = useState<ZoneBounds | null>(null);
+  const [zoneCandidates, setZoneCandidates] = useState<Client[]>([]);
+  const [zoneStatuses, setZoneStatuses] = useState<Record<number, CallStatus>>({});
+  const [zoneAddedIds, setZoneAddedIds] = useState<Set<number>>(new Set());
+  const [findingClient, setFindingClient] = useState(false);
 
   const mapClients = useMemo(() => {
     const byId = new Map<number, Client>();
@@ -128,8 +156,8 @@ export default function MappaPage() {
         const cmp = (a.cognome ?? "").localeCompare(b.cognome ?? "", "it");
         return cmp !== 0 ? cmp : (a.nome ?? "").localeCompare(b.nome ?? "", "it");
       });
-      setFiltered(result);
-    }, 200);
+      startFilterTransition(() => setFiltered(result));
+    }, 150);
   }, [search, statoFilter, urgenteOnly, clients]);
 
   const toggleSelect = useCallback((id: number) => {
@@ -145,6 +173,12 @@ export default function MappaPage() {
   useEffect(() => {
     const prev = prevSelectedSizeRef.current;
     const curr = selectedIds.size;
+    prevSelectedSizeRef.current = curr;
+    // Durante il flusso "lavora a zona" non proporre il percorso vicini.
+    if (zoneMode || zoneBounds) {
+      setNearestPrompt(null);
+      return;
+    }
     if (prev === 0 && curr === 1) {
       const onlyId = [...selectedIds][0];
       const client = clients.find((c) => c.id === onlyId);
@@ -157,8 +191,7 @@ export default function MappaPage() {
       }
     }
     if (curr === 0) setNearestPrompt(null);
-    prevSelectedSizeRef.current = curr;
-  }, [selectedIds, clients]);
+  }, [selectedIds, clients, zoneMode, zoneBounds]);
 
   const focusClient = useCallback((id: number) => {
     setFocusedId(id);
@@ -270,6 +303,155 @@ export default function MappaPage() {
     [clients, nearestCount]
   );
 
+  // --- Flusso "lavora a zona" ---
+  const targetClients = useMemo(
+    () => Math.max(2, (settings?.nearestNeighbours ?? 4) + 1),
+    [settings]
+  );
+
+  const zoneOkCount = useMemo(
+    () => zoneCandidates.filter((c) => zoneStatuses[c.id] === "ok").length,
+    [zoneCandidates, zoneStatuses]
+  );
+
+  const zoneCanFindMore = useMemo(() => {
+    const excluded = new Set(zoneCandidates.map((c) => c.id));
+    return clients.some(
+      (c) => c.lat != null && c.lng != null && !excluded.has(c.id) && zoneStatuses[c.id] !== "ko"
+    );
+  }, [clients, zoneCandidates, zoneStatuses]);
+
+  const closeZone = useCallback(() => {
+    setZoneMode(false);
+    setZoneBounds(null);
+    setZoneCandidates([]);
+    setZoneStatuses({});
+    setZoneAddedIds(new Set());
+    setFindingClient(false);
+  }, []);
+
+  const startZone = useCallback(() => {
+    setSelectedIds(new Set());
+    setRouteResult(null);
+    setNearestPrompt(null);
+    setZoneBounds(null);
+    setZoneCandidates([]);
+    setZoneStatuses({});
+    setZoneAddedIds(new Set());
+    setFindingClient(false);
+    setMobilePanel(null);
+    setZoneMode(true);
+    toast("Disegna un rettangolo sulla mappa per scegliere la zona");
+  }, []);
+
+  const handleZoneDrawn = useCallback(
+    (bounds: ZoneBounds) => {
+      setZoneMode(false);
+      const inZone = clients.filter(
+        (c) =>
+          c.lat != null &&
+          c.lng != null &&
+          c.lat >= bounds.south &&
+          c.lat <= bounds.north &&
+          c.lng >= bounds.west &&
+          c.lng <= bounds.east
+      );
+      const sorted = [...inZone].sort(zonePriority);
+      setZoneBounds(bounds);
+      setZoneCandidates(sorted);
+      setZoneStatuses({});
+      setZoneAddedIds(new Set());
+      if (sorted.length === 0) {
+        toast.error("Nessun cliente con coordinate in questa zona");
+      } else {
+        toast.success(`${sorted.length} client${sorted.length === 1 ? "e" : "i"} nella zona`);
+      }
+    },
+    [clients]
+  );
+
+  const setZoneStatus = useCallback((id: number, status: CallStatus | null) => {
+    setZoneStatuses((prev) => {
+      const next = { ...prev };
+      if (status === null) delete next[id];
+      else next[id] = status;
+      return next;
+    });
+  }, []);
+
+  const findAnotherClient = useCallback(() => {
+    setFindingClient(true);
+    try {
+      const okClients = zoneCandidates.filter(
+        (c) => zoneStatuses[c.id] === "ok" && c.lat != null && c.lng != null
+      );
+      const ref =
+        okClients.length > 0
+          ? {
+              lat: okClients.reduce((s, c) => s + c.lat!, 0) / okClients.length,
+              lng: okClients.reduce((s, c) => s + c.lng!, 0) / okClients.length,
+            }
+          : zoneBounds
+            ? {
+                lat: (zoneBounds.north + zoneBounds.south) / 2,
+                lng: (zoneBounds.east + zoneBounds.west) / 2,
+              }
+            : null;
+      if (!ref) return;
+
+      const excluded = new Set(zoneCandidates.map((c) => c.id));
+      const pool = clients.filter(
+        (c) =>
+          c.lat != null &&
+          c.lng != null &&
+          !excluded.has(c.id) &&
+          zoneStatuses[c.id] !== "ko"
+      );
+      if (pool.length === 0) {
+        toast.error("Nessun altro cliente disponibile");
+        return;
+      }
+
+      let best = pool[0];
+      let bestDist = haversineKm(ref.lat, ref.lng, best.lat!, best.lng!);
+      for (const c of pool) {
+        const d = haversineKm(ref.lat, ref.lng, c.lat!, c.lng!);
+        if (d < bestDist) {
+          best = c;
+          bestDist = d;
+        }
+      }
+
+      setZoneCandidates((prev) => [...prev, best]);
+      setZoneAddedIds((prev) => {
+        const next = new Set(prev);
+        next.add(best.id);
+        return next;
+      });
+      setZoneStatuses((prev) => ({ ...prev, [best.id]: "ok" }));
+      setFocusedId(best.id);
+      const name = [best.cognome, best.nome].filter(Boolean).join(" ");
+      toast.success(`Aggiunto ${name} a ${bestDist.toFixed(1)} km`);
+    } finally {
+      setFindingClient(false);
+    }
+  }, [clients, zoneCandidates, zoneStatuses, zoneBounds]);
+
+  const planZoneRoute = useCallback(async () => {
+    const okIds = zoneCandidates
+      .filter((c) => zoneStatuses[c.id] === "ok")
+      .map((c) => c.id);
+    if (okIds.length < 2) {
+      toast.error("Segna almeno 2 clienti come OK");
+      return;
+    }
+    const ids = new Set(okIds);
+    setSelectedIds(ids);
+    await calculateRoute(ids);
+    closeZone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoneCandidates, zoneStatuses, closeZone]);
+
   async function restoreFromHistory(entry: RouteHistoryEntry) {
     setSelectedIds(new Set(entry.clientIds));
     setMobilePanel(null);
@@ -319,6 +501,8 @@ export default function MappaPage() {
         onOpenHistory={openHistory}
         filtersOpen={filtersOpen}
         onToggleFilters={() => setFiltersOpen((v) => !v)}
+        zoneMode={zoneMode}
+        onToggleZone={() => (zoneMode || zoneBounds ? closeZone() : startZone())}
       />
 
       <div className="flex flex-1 min-h-0 relative">
@@ -381,7 +565,42 @@ export default function MappaPage() {
             onToggleSelect={toggleSelect}
             routeResult={routeResult}
             focusedId={focusedId}
+            zoneMode={zoneMode}
+            zoneBounds={zoneBounds}
+            onZoneDrawn={handleZoneDrawn}
           />
+
+          {zoneMode && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-indigo-600 text-white rounded-full pl-3 pr-1.5 py-1.5 text-xs font-medium shadow-lg">
+              <MapPinned size={14} />
+              Disegna la zona sulla mappa
+              <button
+                type="button"
+                onClick={closeZone}
+                className="ml-1 rounded-full bg-white/20 hover:bg-white/30 px-2 py-0.5 text-[11px]"
+              >
+                Annulla
+              </button>
+            </div>
+          )}
+
+          {zoneBounds && !routeResult && (
+            <ZonePanel
+              candidates={zoneCandidates}
+              statuses={zoneStatuses}
+              addedIds={zoneAddedIds}
+              okCount={zoneOkCount}
+              target={targetClients}
+              calculating={calculating}
+              finding={findingClient}
+              canFindMore={zoneCanFindMore}
+              onSetStatus={setZoneStatus}
+              onFocus={focusClient}
+              onFindAnother={findAnotherClient}
+              onPlan={() => void planZoneRoute()}
+              onClose={closeZone}
+            />
+          )}
 
           {routeResult && (
             <RoutePanel
@@ -398,6 +617,16 @@ export default function MappaPage() {
 
       {/* Mobile: barra azioni sopra nav */}
       <div className="md:hidden fixed bottom-14 inset-x-0 z-[500] flex border-t border-slate-200 bg-white">
+        <button
+          type="button"
+          onClick={() => (zoneMode || zoneBounds ? closeZone() : startZone())}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium border-r border-slate-200 ${
+            zoneMode || zoneBounds ? "text-indigo-600 bg-indigo-50" : "text-slate-600"
+          }`}
+        >
+          <MapPinned size={16} />
+          Zona
+        </button>
         <button
           type="button"
           onClick={() => setMobilePanel(mobilePanel === "clients" ? null : "clients")}

@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import type { Client, Settings, RouteResult } from "@/types/client";
+import type { Client, Settings, RouteResult, ZoneBounds } from "@/types/client";
 
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -98,6 +98,12 @@ interface MapProps {
   onToggleSelect: (id: number) => void;
   routeResult: RouteResult | null;
   focusedId?: number | null;
+  /** Modalità "disegna zona": disabilita il drag e abilita il rettangolo di selezione */
+  zoneMode?: boolean;
+  /** Rettangolo zona attivo da mostrare in modo persistente */
+  zoneBounds?: ZoneBounds | null;
+  /** Callback al termine del disegno del rettangolo */
+  onZoneDrawn?: (bounds: ZoneBounds) => void;
 }
 
 export default function ClientMap({
@@ -107,6 +113,9 @@ export default function ClientMap({
   onToggleSelect,
   routeResult,
   focusedId,
+  zoneMode = false,
+  zoneBounds = null,
+  onZoneDrawn,
 }: MapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -118,6 +127,12 @@ export default function ClientMap({
   const pulseMarkerRef = useRef<L.Marker | null>(null);
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeStopsKeyRef = useRef<string>("");
+  const zoneRectRef = useRef<L.Rectangle | null>(null);
+  const onZoneDrawnRef = useRef(onZoneDrawn);
+
+  useEffect(() => {
+    onZoneDrawnRef.current = onZoneDrawn;
+  }, [onZoneDrawn]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -320,6 +335,117 @@ export default function ClientMap({
       map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
     }
   }, [routeResult]);
+
+  // Disegno interattivo del rettangolo "zona" (mouse + touch via pointer events)
+  useEffect(() => {
+    const map = mapRef.current;
+    const container = containerRef.current;
+    if (!map || !container || !zoneMode) return;
+
+    map.dragging.disable();
+    map.boxZoom.disable();
+    map.doubleClickZoom.disable();
+    container.style.cursor = "crosshair";
+
+    let startLL: L.LatLng | null = null;
+    let drawRect: L.Rectangle | null = null;
+
+    const toLatLng = (e: PointerEvent): L.LatLng => {
+      const r = container.getBoundingClientRect();
+      return map.containerPointToLatLng(L.point(e.clientX - r.left, e.clientY - r.top));
+    };
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      startLL = toLatLng(e);
+      drawRect = L.rectangle(L.latLngBounds(startLL, startLL), {
+        color: "#4f46e5",
+        weight: 2,
+        dashArray: "6 4",
+        fillColor: "#6366f1",
+        fillOpacity: 0.1,
+        interactive: false,
+      }).addTo(map);
+      try {
+        container.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      e.preventDefault();
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!startLL || !drawRect) return;
+      drawRect.setBounds(L.latLngBounds(startLL, toLatLng(e)));
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (!startLL || !drawRect) return;
+      const bounds = L.latLngBounds(startLL, toLatLng(e));
+      drawRect.remove();
+      drawRect = null;
+      startLL = null;
+      const ne = bounds.getNorthEast();
+      const sw = bounds.getSouthWest();
+      // Ignora i tap accidentali (rettangoli troppo piccoli)
+      const dxPx = Math.abs(
+        map.latLngToContainerPoint(ne).x - map.latLngToContainerPoint(sw).x
+      );
+      const dyPx = Math.abs(
+        map.latLngToContainerPoint(ne).y - map.latLngToContainerPoint(sw).y
+      );
+      if (dxPx < 12 || dyPx < 12) return;
+      onZoneDrawnRef.current?.({
+        south: sw.lat,
+        west: sw.lng,
+        north: ne.lat,
+        east: ne.lng,
+      });
+    };
+
+    container.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+
+    return () => {
+      container.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      drawRect?.remove();
+      map.dragging.enable();
+      map.boxZoom.enable();
+      map.doubleClickZoom.enable();
+      container.style.cursor = "";
+    };
+  }, [zoneMode]);
+
+  // Rettangolo zona persistente (mentre il flusso è aperto)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (zoneRectRef.current) {
+      zoneRectRef.current.remove();
+      zoneRectRef.current = null;
+    }
+
+    if (!zoneBounds) return;
+
+    const bounds = L.latLngBounds(
+      [zoneBounds.south, zoneBounds.west],
+      [zoneBounds.north, zoneBounds.east]
+    );
+    const rect = L.rectangle(bounds, {
+      color: "#4f46e5",
+      weight: 2,
+      fillColor: "#6366f1",
+      fillOpacity: 0.06,
+      interactive: false,
+    });
+    rect.addTo(map);
+    zoneRectRef.current = rect;
+    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+  }, [zoneBounds]);
 
   return <div ref={containerRef} className="w-full h-full" />;
 }
