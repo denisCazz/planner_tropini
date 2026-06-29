@@ -86,6 +86,11 @@ export default function MappaPage() {
   const [findingClient, setFindingClient] = useState(false);
 
   const mapClients = useMemo(() => {
+    // Durante la visualizzazione del percorso mostra solo le tappe selezionate,
+    // così la mappa resta pulita e si vedono solo i punti del percorso.
+    if (routeResult) {
+      return routeResult.steps.map((s) => s.client);
+    }
     const byId = new Map<number, Client>();
     for (const c of filtered) byId.set(c.id, c);
     for (const id of selectedIds) {
@@ -93,7 +98,7 @@ export default function MappaPage() {
       if (c) byId.set(id, c);
     }
     return Array.from(byId.values());
-  }, [clients, filtered, selectedIds]);
+  }, [clients, filtered, selectedIds, routeResult]);
 
   const loadHistory = useCallback(() => {
     setHistoryLoading(true);
