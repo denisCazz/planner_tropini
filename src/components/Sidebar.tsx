@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Map, Users, Settings, LayoutDashboard } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Map, Users, Settings, LayoutDashboard, LogOut } from "lucide-react";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -13,6 +14,13 @@ const NAV = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
 
   return (
     <>
@@ -25,26 +33,40 @@ export default function Sidebar() {
           <Map size={18} className="text-white" />
         </Link>
 
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              title={label}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all group relative ${
-                active
-                  ? "bg-white/15 text-white shadow-inner"
-                  : "text-slate-400 hover:bg-white/10 hover:text-white"
-              }`}
-            >
-              <Icon size={18} strokeWidth={active ? 2.25 : 2} />
-              <span className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 shadow-lg">
-                {label}
-              </span>
-            </Link>
-          );
-        })}
+        <div className="flex flex-col gap-1 flex-1">
+          {NAV.map(({ href, label, icon: Icon }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                title={label}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all group relative ${
+                  active
+                    ? "bg-white/15 text-white shadow-inner"
+                    : "text-slate-400 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <Icon size={18} strokeWidth={active ? 2.25 : 2} />
+                <span className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 shadow-lg">
+                  {label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="Esci"
+          className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-all group relative mt-auto"
+        >
+          <LogOut size={18} />
+          <span className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 shadow-lg">
+            Esci
+          </span>
+        </button>
       </aside>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around h-14 pb-safe">
