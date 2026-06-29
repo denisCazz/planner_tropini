@@ -12,6 +12,7 @@ import {
   Calendar,
   ChevronUp,
   ChevronDown,
+  Home,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -78,6 +79,15 @@ export default function RoutePanel({
 
   const steps = stepsOrdered.length > 0 ? stepsOrdered : result.steps;
 
+  const homePoint =
+    settings?.startLat != null && settings?.startLng != null
+      ? {
+          lat: settings.startLat,
+          lng: settings.startLng,
+          label: settings.startLabel?.trim() || "Casa",
+        }
+      : null;
+
   function scheduleApplyVisitOrder(visitOrder: number[]) {
     if (reorderDebounceRef.current) clearTimeout(reorderDebounceRef.current);
     reorderDebounceRef.current = setTimeout(() => {
@@ -98,7 +108,9 @@ export default function RoutePanel({
     scheduleApplyVisitOrder(renumbered.map((s) => s.client.id));
   }
 
-  /** Build a Google Maps multi-stop directions URL (ordine = tappe correnti) */
+  /** Build a Google Maps multi-stop directions URL (ordine = tappe correnti).
+   *  Se la casa (punto di partenza) è impostata, il percorso parte da casa,
+   *  visita tutte le tappe e rientra a casa (ultima tappa → casa). */
   function buildGoogleMapsUrl(): string {
     const stops = steps.map((s) => s.client);
     if (stops.length === 0) return "https://maps.google.com";
@@ -109,33 +121,34 @@ export default function RoutePanel({
       return encodeURIComponent(addr || `${c.nome} ${c.cognome}`);
     }
 
-    let originParam: string;
-    if (settings?.startLat != null && settings?.startLng != null) {
-      originParam = `${settings.startLat},${settings.startLng}`;
+    const stopParams = stops.map(stopParam);
+
+    let parts: string[];
+    if (homePoint) {
+      const homeParam = `${homePoint.lat},${homePoint.lng}`;
+      // casa → tappe → casa (rientro a casa incluso)
+      parts = [homeParam, ...stopParams, homeParam];
     } else {
-      originParam = stopParam(stops[0]);
+      // senza casa: prima tappa → ... → ultima tappa
+      parts = stopParams;
     }
 
-    const destination = stopParam(stops[stops.length - 1]);
-    const waypoints = stops
-      .slice(0, stops.length - 1)
-      .map(stopParam)
-      .join("/");
-
     const base = "https://www.google.com/maps/dir";
-    const parts = [originParam, ...(waypoints ? waypoints.split("/") : []), destination];
     return `${base}/${parts.join("/")}`;
   }
 
   /** Itinerario testuale con orari (Google Maps nell’URL non supporta orari per tappa) */
   function buildScheduleText(): string {
-    const lines = steps.map((s, i) => {
+    const lines: string[] = [];
+    if (homePoint) lines.push(`Partenza — ${homePoint.label}`);
+    steps.forEach((s, i) => {
       const tm = timesById[s.client.id];
       const nome = `${s.client.cognome} ${s.client.nome}`.trim();
       const addr = [s.client.indirizzo, s.client.citta].filter(Boolean).join(", ");
       const timePart = tm ? `${tm} — ` : "";
-      return `${i + 1}. ${timePart}${nome}${addr ? ` — ${addr}` : ""}`;
+      lines.push(`${i + 1}. ${timePart}${nome}${addr ? ` — ${addr}` : ""}`);
     });
+    if (homePoint) lines.push(`Rientro a casa — ${homePoint.label}`);
     return lines.join("\n");
   }
 
@@ -213,6 +226,13 @@ export default function RoutePanel({
       })
       .join("");
 
+    const homeStartRow = homePoint
+      ? `<tr class="home-row"><td class="num">\uD83C\uDFE0</td><td class="time">—</td><td><strong>Partenza</strong><div class="addr">${escapeHtml(homePoint.label)}</div></td><td></td></tr>`
+      : "";
+    const homeEndRow = homePoint
+      ? `<tr class="home-row"><td class="num">\uD83C\uDFE0</td><td class="time">—</td><td><strong>Rientro a casa</strong><div class="addr">${escapeHtml(homePoint.label)}</div></td><td></td></tr>`
+      : "";
+
     const schedBlock = `<div class="sched-block"><strong>Itinerario con orari</strong><pre class="sched-pre">${escapeHtml(buildScheduleText())}</pre></div>`;
 
     const qrBlock = qrDataUrl
@@ -238,6 +258,8 @@ export default function RoutePanel({
   th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;font-weight:700;border-bottom:2px solid #e2e8f0;padding:7px 10px}
   td{padding:11px 10px;border-bottom:1px solid #f1f5f9;vertical-align:top}
   td.num{width:36px;font-weight:800;color:#1d4ed8;font-size:15px;text-align:center}
+  tr.home-row{background:#f0f7ff}
+  tr.home-row td{color:#1e3a8a}
   td.time{width:52px;font-size:12px;font-weight:600;color:#1e40af;text-align:center}
   .addr{color:#555;font-size:11px;margin-top:3px}
   .tel{color:#1d4ed8;font-size:11px;margin-top:2px}
@@ -271,7 +293,7 @@ export default function RoutePanel({
 ${schedBlock}
 <table>
   <thead><tr><th>#</th><th>Orario</th><th>Cliente</th><th>Stato</th></tr></thead>
-  <tbody>${rows}</tbody>
+  <tbody>${homeStartRow}${rows}${homeEndRow}</tbody>
 </table>
 ${qrBlock}
 <footer>Generato automaticamente da Planner Tropini</footer>
@@ -317,6 +339,17 @@ ${qrBlock}
       </div>
 
       <ol className="divide-y divide-gray-50 overflow-y-auto flex-1 min-h-0">
+        {homePoint && (
+          <li className="flex items-center gap-2 px-3 py-2 bg-indigo-50/70">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
+              <Home size={11} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-xs text-indigo-900">Partenza · Casa</div>
+              <div className="text-[11px] text-indigo-700/70 truncate">{homePoint.label}</div>
+            </div>
+          </li>
+        )}
         {steps.map(({ client, order }, index) => {
           const addr = [client.indirizzo, client.citta].filter(Boolean).join(", ");
           return (
@@ -386,6 +419,17 @@ ${qrBlock}
             </li>
           );
         })}
+        {homePoint && (
+          <li className="flex items-center gap-2 px-3 py-2 bg-indigo-50/70">
+            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
+              <Home size={11} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-xs text-indigo-900">Rientro · Casa</div>
+              <div className="text-[11px] text-indigo-700/70 truncate">{homePoint.label}</div>
+            </div>
+          </li>
+        )}
       </ol>
     </div>
   );
