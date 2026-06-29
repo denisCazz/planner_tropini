@@ -174,8 +174,19 @@ export default function ZonePanel({
   const progress = Math.min(100, Math.round((okCount / target) * 100));
 
   return (
-    <div className="fixed inset-x-0 bottom-28 md:absolute md:inset-x-auto md:right-3 md:top-20 md:bottom-auto md:w-80 z-[1000] bg-white border border-slate-200 rounded-t-xl md:rounded-xl overflow-hidden flex flex-col max-h-[calc(100dvh-11rem)] md:max-h-[calc(100%-5.75rem)] shadow-lg">
-      <div className="flex items-start justify-between gap-2 px-3 py-2.5 bg-indigo-600 text-white shrink-0">
+    <div className="fixed inset-0 z-[1500] md:flex md:items-center md:justify-center md:p-8 pointer-events-none">
+      <div
+        className="hidden md:block absolute inset-0 bg-slate-900/50 backdrop-blur-sm pointer-events-auto"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Pianificazione zona"
+        className="pointer-events-auto fixed inset-x-0 bottom-28 md:relative md:inset-auto md:w-full md:max-w-3xl bg-white border border-slate-200 rounded-t-2xl md:rounded-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-11rem)] md:max-h-[85vh] shadow-2xl"
+      >
+      <div className="flex items-start justify-between gap-2 px-4 py-3 md:px-6 md:py-4 bg-indigo-600 text-white shrink-0">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-sm font-medium">
             <MapPinned size={15} className="shrink-0" />
@@ -264,6 +275,7 @@ export default function ZonePanel({
           {calculating ? <Loader2 size={14} className="animate-spin" /> : <Navigation size={14} />}
           {okCount > 0 ? okCount : "Pianifica"}
         </button>
+      </div>
       </div>
     </div>
   );
