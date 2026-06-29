@@ -303,21 +303,32 @@ ${qrBlock}
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 md:absolute md:inset-x-auto md:right-3 md:top-20 md:bottom-auto md:w-80 z-[1000] bg-white border border-slate-200 md:rounded-xl overflow-hidden flex flex-col max-h-[70vh] md:max-h-[calc(100vh-6rem)] shadow-lg">
-      <div className="flex items-center justify-between px-3 py-2.5 bg-indigo-600 text-white shrink-0">
-        <div className="flex items-center gap-2 font-medium text-sm">
-          <Navigation size={15} />
+    <div className="fixed inset-0 z-[1500] md:flex md:items-center md:justify-center md:p-8 pointer-events-none">
+      <div
+        className="hidden md:block absolute inset-0 bg-slate-900/50 backdrop-blur-sm pointer-events-auto"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Percorso calcolato"
+        className="pointer-events-auto fixed inset-x-0 bottom-0 md:relative md:inset-auto md:w-full md:max-w-4xl bg-white border border-slate-200 rounded-t-2xl md:rounded-2xl overflow-hidden flex flex-col max-h-[70vh] md:max-h-[85vh] shadow-2xl"
+      >
+      <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-indigo-600 text-white shrink-0">
+        <div className="flex items-center gap-2 font-semibold text-sm md:text-base">
+          <Navigation size={18} />
           Percorso
-          <span className="text-indigo-200 font-normal">
-            {result.totalDistance} km · ~{result.totalDuration} min
+          <span className="text-indigo-200 font-normal text-sm">
+            {result.totalDistance} km · ~{result.totalDuration} min · {steps.length} tappe
           </span>
         </div>
-        <button onClick={onClose} className="p-1 rounded hover:bg-white/20">
-          <X size={16} />
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/20" aria-label="Chiudi">
+          <X size={18} />
         </button>
       </div>
 
-      <div className="flex gap-2 px-3 py-2 border-b border-slate-100 shrink-0">
+      <div className="flex gap-2 px-4 py-3 md:px-6 border-b border-slate-100 shrink-0">
         <button
           type="button"
           onClick={() => void handleMarkVisitsToday()}
@@ -338,9 +349,9 @@ ${qrBlock}
         </button>
       </div>
 
-      <ol className="divide-y divide-gray-50 overflow-y-auto flex-1 min-h-0">
+      <ol className="divide-y divide-gray-50 overflow-y-auto flex-1 min-h-0 md:grid md:grid-cols-2 md:divide-y-0 md:gap-px md:bg-slate-100 md:p-1">
         {homePoint && (
-          <li className="flex items-center gap-2 px-3 py-2 bg-indigo-50/70">
+          <li className="flex items-center gap-2 px-4 py-3 md:px-5 md:py-4 bg-indigo-50/70 md:bg-white md:rounded-lg">
             <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
               <Home size={11} />
             </span>
@@ -353,7 +364,7 @@ ${qrBlock}
         {steps.map(({ client, order }, index) => {
           const addr = [client.indirizzo, client.citta].filter(Boolean).join(", ");
           return (
-            <li key={client.id} className="flex items-start gap-2 px-3 py-2.5">
+            <li key={client.id} className="flex items-start gap-3 px-4 py-3 md:px-5 md:py-4 md:bg-white md:rounded-lg">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                 {order}
               </span>
@@ -420,7 +431,7 @@ ${qrBlock}
           );
         })}
         {homePoint && (
-          <li className="flex items-center gap-2 px-3 py-2 bg-indigo-50/70">
+          <li className="flex items-center gap-2 px-4 py-3 md:px-5 md:py-4 bg-indigo-50/70 md:bg-white md:rounded-lg">
             <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
               <Home size={11} />
             </span>
@@ -431,6 +442,7 @@ ${qrBlock}
           </li>
         )}
       </ol>
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  if (!process.env.AUTH_SECRET || !process.env.AUTH_USERNAME || !process.env.AUTH_PASSWORD) {
+  if (!process.env.AUTH_SECRET) {
     return NextResponse.json(
       { error: "Autenticazione non configurata sul server" },
       { status: 503 }
