@@ -174,14 +174,22 @@ export default function ZonePanel({
   const progress = Math.min(100, Math.round((okCount / target) * 100));
 
   return (
-    <div className="fixed inset-x-0 bottom-0 md:absolute md:inset-x-auto md:right-3 md:top-20 md:bottom-auto md:w-80 z-[1000] bg-white border border-slate-200 md:rounded-xl overflow-hidden flex flex-col max-h-[72vh] md:max-h-[calc(100vh-6rem)] shadow-lg">
-      <div className="flex items-center justify-between px-3 py-2.5 bg-indigo-600 text-white shrink-0">
-        <div className="flex items-center gap-2 font-medium text-sm">
-          <MapPinned size={15} />
-          Zona selezionata
-          <span className="text-indigo-200 font-normal">{candidates.length} clienti</span>
+    <div className="fixed inset-x-0 bottom-28 md:absolute md:inset-x-auto md:right-3 md:top-20 md:bottom-auto md:w-80 z-[1000] bg-white border border-slate-200 md:rounded-xl overflow-hidden flex flex-col max-h-[min(72vh,calc(100vh-9rem))] md:max-h-[calc(100vh-6rem)] shadow-lg">
+      <div className="flex items-start justify-between gap-2 px-3 py-2.5 bg-indigo-600 text-white shrink-0">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 text-sm font-medium">
+            <MapPinned size={15} className="shrink-0" />
+            <span className="truncate">Zona selezionata</span>
+          </div>
+          <p className="text-[11px] text-indigo-200 font-normal mt-0.5 pl-[22px]">
+            {candidates.length} client{candidates.length === 1 ? "e" : "i"}
+          </p>
         </div>
-        <button onClick={onClose} className="p-1 rounded hover:bg-white/20" aria-label="Chiudi">
+        <button
+          onClick={onClose}
+          className="p-1 rounded hover:bg-white/20 shrink-0"
+          aria-label="Chiudi"
+        >
           <X size={16} />
         </button>
       </div>
@@ -246,12 +254,15 @@ export default function ZonePanel({
           type="button"
           onClick={onPlan}
           disabled={!canPlan || calculating}
-          className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold disabled:opacity-40 transition-colors"
+          title={
+            reached
+              ? `Pianifica percorso con ${okCount} clienti`
+              : `Pianifica con ${okCount} clienti selezionati`
+          }
+          className="w-full flex items-center justify-center gap-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors"
         >
-          {calculating ? <Loader2 size={15} className="animate-spin" /> : <Navigation size={15} />}
-          {reached
-            ? `Pianifica percorso (${okCount})`
-            : `Pianifica con questi (${okCount})`}
+          {calculating ? <Loader2 size={14} className="animate-spin" /> : <Navigation size={14} />}
+          {okCount > 0 ? okCount : "Pianifica"}
         </button>
       </div>
     </div>
