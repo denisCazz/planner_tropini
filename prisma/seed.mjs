@@ -42,6 +42,8 @@ async function main() {
 
   const adminUser = process.env.AUTH_USERNAME ?? "admin";
   const adminPass = process.env.AUTH_PASSWORD ?? "admin123";
+  const tropiniUser = process.env.TROPINI_USERNAME ?? "tropini";
+  const tropiniPass = process.env.TROPINI_PASSWORD ?? adminPass;
 
   await prisma.user.upsert({
     where: { username: adminUser },
@@ -54,6 +56,21 @@ async function main() {
       username: adminUser,
       passwordHash: hashPassword(adminPass),
       role: "ADMIN",
+      organizationId: tropini.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { username: tropiniUser },
+    update: {
+      passwordHash: hashPassword(tropiniPass),
+      role: "USER",
+      organizationId: tropini.id,
+    },
+    create: {
+      username: tropiniUser,
+      passwordHash: hashPassword(tropiniPass),
+      role: "USER",
       organizationId: tropini.id,
     },
   });
