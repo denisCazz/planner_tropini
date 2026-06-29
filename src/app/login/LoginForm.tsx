@@ -57,43 +57,34 @@ export default function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-slate-950">
-      {/* Hero immagine — desktop a sinistra, mobile in alto */}
-      <div className="relative lg:w-[52%] xl:w-[55%] min-h-[220px] sm:min-h-[280px] lg:min-h-screen shrink-0 overflow-hidden">
-        <Image
-          src="/images/login-hero.png"
-          alt="Planner Tropini — ottimizzazione percorsi"
-          fill
-          priority
-          className="object-cover object-center"
-          sizes="(max-width: 1024px) 100vw, 55vw"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t lg:bg-gradient-to-r from-slate-950/90 via-slate-950/40 to-transparent" />
-        <div className="absolute inset-0 hidden lg:flex flex-col justify-end p-10 xl:p-14">
-          <p className="text-cyan-300/90 text-sm font-medium tracking-widest uppercase mb-2">
-            Field sales CRM
-          </p>
-          <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight max-w-md">
-            Clienti, mappa e percorsi ottimizzati
-          </h1>
-          <p className="text-slate-300/80 text-sm mt-3 max-w-sm leading-relaxed">
-            Pianifica le visite sul territorio con percorsi intelligenti e una mappa interattiva.
-          </p>
+    <div className="min-h-screen flex flex-col lg:flex-row bg-[#060d18]">
+      {/* Hero — immagine intera, senza crop */}
+      <div className="relative flex items-center justify-center px-4 py-8 sm:px-8 sm:py-10 lg:flex-1 lg:min-h-screen lg:px-10 xl:px-14">
+        <div className="relative w-full max-w-[640px] lg:max-w-[720px] xl:max-w-[780px]">
+          <Image
+            src="/images/login-hero.png"
+            alt="Planner Tropini — ottimizzazione percorsi"
+            width={1536}
+            height={1024}
+            priority
+            className="w-full h-auto"
+            sizes="(max-width: 1024px) 90vw, 45vw"
+          />
         </div>
+        {/* Sfumatura solo sul bordo destro verso il form */}
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 hidden lg:block w-32 xl:w-48 bg-gradient-to-l from-[#060d18] to-transparent"
+          aria-hidden
+        />
       </div>
 
       {/* Pannello login */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-12 bg-slate-950 lg:bg-slate-900/50">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-12 lg:max-w-[480px] xl:max-w-[520px] shrink-0">
         <div className="w-full max-w-[420px]">
-          <div className="lg:hidden mb-6">
-            <h1 className="text-2xl font-bold text-white">Planner Tropini</h1>
-            <p className="text-slate-400 text-sm mt-1">Accedi al tuo account</p>
-          </div>
-
-          <div className="hidden lg:block mb-8">
-            <h2 className="text-2xl font-bold text-white">Bentornato</h2>
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold text-white lg:text-[1.65rem]">Accedi</h1>
             <p className="text-slate-400 mt-1.5 text-sm">
-              Inserisci le credenziali per accedere all&apos;app
+              Inserisci le credenziali per entrare in Planner Tropini
             </p>
           </div>
 
@@ -147,7 +138,6 @@ export default function LoginForm() {
               )}
             </div>
 
-            {/* Azioni in basso — non in alto */}
             <div className="border-t border-slate-800 bg-slate-950/40 px-6 sm:px-8 py-5 space-y-3">
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
