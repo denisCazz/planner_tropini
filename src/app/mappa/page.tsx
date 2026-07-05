@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, useTransition } from "react";
 import dynamic from "next/dynamic";
-import { Users, History, Loader2, MapPinned } from "lucide-react";
+import { Users, History, Loader2, MapPinned, Route, MousePointerClick } from "lucide-react";
 import { toast } from "sonner";
 import type {
   Client,
@@ -63,6 +63,8 @@ export default function MappaPage() {
   const [urgenteOnly, setUrgenteOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [mapIds, setMapIds] = useState<Set<number>>(new Set());
+  const [planMode, setPlanMode] = useState(false);
   const [focusedId, setFocusedId] = useState<number | null>(null);
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [calculating, setCalculating] = useState(false);
@@ -86,19 +88,14 @@ export default function MappaPage() {
   const [findingClient, setFindingClient] = useState(false);
 
   const mapClients = useMemo(() => {
-    // Durante la visualizzazione del percorso mostra solo le tappe selezionate,
+    // Durante la visualizzazione del percorso mostra solo le tappe,
     // così la mappa resta pulita e si vedono solo i punti del percorso.
     if (routeResult) {
       return routeResult.steps.map((s) => s.client);
     }
-    const byId = new Map<number, Client>();
-    for (const c of filtered) byId.set(c.id, c);
-    for (const id of selectedIds) {
-      const c = clients.find((x) => x.id === id);
-      if (c) byId.set(id, c);
-    }
-    return Array.from(byId.values());
-  }, [clients, filtered, selectedIds, routeResult]);
+    // Altrimenti mostra SOLO i clienti "spuntati" dall'elenco.
+    return clients.filter((c) => mapIds.has(c.id));
+  }, [clients, mapIds, routeResult]);
 
   const loadHistory = useCallback(() => {
     setHistoryLoading(true);
@@ -165,6 +162,7 @@ export default function MappaPage() {
     }, 150);
   }, [search, statoFilter, urgenteOnly, clients]);
 
+  // Selezione per il PERCORSO (dai marker sulla mappa / popup)
   const toggleSelect = useCallback((id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -172,8 +170,78 @@ export default function MappaPage() {
       else next.add(id);
       return next;
     });
+    // I clienti selezionati per il percorso sono sempre anche sulla mappa
+    setMapIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
     setRouteResult(null);
   }, []);
+
+  // Spunta / rimuovi un cliente dalla MAPPA (dall'elenco laterale)
+  const toggleMap = useCallback((id: number) => {
+    setMapIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        setSelectedIds((sel) => {
+          if (!sel.has(id)) return sel;
+          const s = new Set(sel);
+          s.delete(id);
+          return s;
+        });
+        setRouteResult(null);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const removeFromMap = useCallback((id: number) => {
+    setMapIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setRouteResult(null);
+  }, []);
+
+  const addAllFilteredToMap = useCallback(() => {
+    setMapIds((prev) => {
+      const next = new Set(prev);
+      for (const c of filtered) next.add(c.id);
+      return next;
+    });
+  }, [filtered]);
+
+  const clearMap = useCallback(() => {
+    setMapIds(new Set());
+    setSelectedIds(new Set());
+    setRouteResult(null);
+  }, []);
+
+  const setClientIcon = useCallback(
+    async (id: number, icona: string | null) => {
+      setClients((prev) => prev.map((c) => (c.id === id ? { ...c, icona } : c)));
+      try {
+        const res = await fetch(`/api/clients/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ icona }),
+        });
+        if (!res.ok) throw new Error();
+      } catch {
+        toast.error("Impossibile salvare l'icona");
+        reloadClients();
+      }
+    },
+    [reloadClients]
+  );
 
   useEffect(() => {
     const prev = prevSelectedSizeRef.current;
@@ -300,6 +368,11 @@ export default function MappaPage() {
       const nearest = sorted.slice(0, nearestCount);
       const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
       setSelectedIds(ids);
+      setMapIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
       setRouteResult(null);
       setNearestPrompt(null);
       setMobilePanel(null);
@@ -452,6 +525,11 @@ export default function MappaPage() {
     }
     const ids = new Set(okIds);
     setSelectedIds(ids);
+    setMapIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.add(id);
+      return next;
+    });
     await calculateRoute(ids);
     closeZone();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -459,6 +537,11 @@ export default function MappaPage() {
 
   async function restoreFromHistory(entry: RouteHistoryEntry) {
     setSelectedIds(new Set(entry.clientIds));
+    setMapIds((prev) => {
+      const next = new Set(prev);
+      for (const id of entry.clientIds) next.add(id);
+      return next;
+    });
     setMobilePanel(null);
     setDesktopPanel("clients");
     await calculateRoute(new Set(entry.clientIds), {
@@ -485,10 +568,22 @@ export default function MappaPage() {
     }
   }
 
+  const togglePlan = useCallback(() => {
+    setPlanMode((v) => {
+      const next = !v;
+      if (next) {
+        setZoneMode(false);
+        setZoneBounds(null);
+        setNearestPrompt(null);
+      }
+      return next;
+    });
+  }, []);
+
   const sharePhone = process.env.NEXT_PUBLIC_SHARE_PHONE;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-slate-50">
+    <div className="flex flex-col h-full min-h-0">
       <MapTopBar
         search={search}
         onSearchChange={setSearch}
@@ -497,6 +592,7 @@ export default function MappaPage() {
         urgenteOnly={urgenteOnly}
         onUrgenteOnlyChange={setUrgenteOnly}
         selectedCount={selectedIds.size}
+        mapCount={mapIds.size}
         filteredCount={filtered.length}
         calculating={calculating}
         onCalculateRoute={() => calculateRoute()}
@@ -508,12 +604,14 @@ export default function MappaPage() {
         onToggleFilters={() => setFiltersOpen((v) => !v)}
         zoneMode={zoneMode}
         onToggleZone={() => (zoneMode || zoneBounds ? closeZone() : startZone())}
+        planMode={planMode}
+        onTogglePlan={togglePlan}
       />
 
       <div className="flex flex-1 min-h-0 relative">
         {sidebarOpen && (
-          <aside className="hidden md:flex w-72 shrink-0 border-r border-slate-200 bg-white flex-col">
-            <div className="flex border-b border-slate-200 shrink-0">
+          <aside className="hidden md:flex w-72 shrink-0 border-r border-white/40 glass-strong flex-col">
+            <div className="flex border-b border-white/40 shrink-0">
               <SideTab
                 active={desktopPanel === "clients"}
                 onClick={() => setDesktopPanel("clients")}
@@ -532,9 +630,13 @@ export default function MappaPage() {
               {desktopPanel === "clients" ? (
                 <ClientListPanel
                   filtered={filtered}
+                  mapIds={mapIds}
                   selectedIds={selectedIds}
                   onFocus={focusClient}
-                  onToggleSelect={toggleSelect}
+                  onToggleMap={toggleMap}
+                  onSetIcon={setClientIcon}
+                  onAddAll={addAllFilteredToMap}
+                  onClearMap={clearMap}
                 />
               ) : (
                 <RouteHistoryPanel
@@ -551,15 +653,26 @@ export default function MappaPage() {
 
         <div className="flex-1 relative min-w-0">
           {loading && (
-            <div className="absolute inset-0 z-[500] bg-white/80 flex items-center justify-center">
+            <div className="absolute inset-0 z-[500] bg-white/40 backdrop-blur-sm flex items-center justify-center">
               <Loader2 size={28} className="text-indigo-500 animate-spin" />
             </div>
           )}
 
           {calculating && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] bg-white border border-slate-200 rounded-full px-3 py-1.5 text-xs font-medium text-slate-700 flex items-center gap-2 shadow-sm">
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] glass-strong rounded-full px-3 py-1.5 text-xs font-medium text-slate-700 flex items-center gap-2">
               <Loader2 size={14} className="animate-spin text-indigo-600" />
               Calcolo...
+            </div>
+          )}
+
+          {!loading && mapIds.size === 0 && !routeResult && !zoneMode && !zoneBounds && (
+            <div className="pointer-events-none absolute inset-x-0 top-16 z-[400] flex justify-center px-4">
+              <div className="glass-strong rounded-2xl px-4 py-3 text-center max-w-xs">
+                <MousePointerClick size={18} className="mx-auto text-indigo-500 mb-1" />
+                <p className="text-xs text-slate-600">
+                  Spunta i clienti nell&apos;elenco per mostrarli sulla mappa.
+                </p>
+              </div>
             </div>
           )}
 
@@ -570,10 +683,29 @@ export default function MappaPage() {
             onToggleSelect={toggleSelect}
             routeResult={routeResult}
             focusedId={focusedId}
+            planMode={planMode}
+            onSetIcon={setClientIcon}
+            onRemoveFromMap={removeFromMap}
             zoneMode={zoneMode}
             zoneBounds={zoneBounds}
             onZoneDrawn={handleZoneDrawn}
           />
+
+          {planMode && !routeResult && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 glass-strong rounded-full pl-3 pr-1.5 py-1.5 text-xs font-medium text-slate-700 shadow-lg">
+              <Route size={14} className="text-indigo-600" />
+              {selectedIds.size >= 2
+                ? `${selectedIds.size} tappe · tocca "Percorso"`
+                : "Modalità pianifica: tocca i clienti sulla mappa"}
+              <button
+                type="button"
+                onClick={togglePlan}
+                className="ml-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 text-[11px]"
+              >
+                Fine
+              </button>
+            </div>
+          )}
 
           {zoneMode && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-indigo-600 text-white rounded-full pl-3 pr-1.5 py-1.5 text-xs font-medium shadow-lg">
@@ -621,12 +753,22 @@ export default function MappaPage() {
       </div>
 
       {/* Mobile: barra azioni sopra nav */}
-      <div className="md:hidden fixed bottom-14 inset-x-0 z-[500] flex border-t border-slate-200 bg-white">
+      <div className="md:hidden fixed bottom-14 inset-x-0 z-[500] flex border-t border-white/40 glass-strong">
+        <button
+          type="button"
+          onClick={togglePlan}
+          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium border-r border-white/40 ${
+            planMode ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
+          }`}
+        >
+          <Route size={16} />
+          Pianifica
+        </button>
         <button
           type="button"
           onClick={() => (zoneMode || zoneBounds ? closeZone() : startZone())}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium border-r border-slate-200 ${
-            zoneMode || zoneBounds ? "text-indigo-600 bg-indigo-50" : "text-slate-600"
+          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium border-r border-white/40 ${
+            zoneMode || zoneBounds ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
           }`}
         >
           <MapPinned size={16} />
@@ -635,15 +777,15 @@ export default function MappaPage() {
         <button
           type="button"
           onClick={() => setMobilePanel(mobilePanel === "clients" ? null : "clients")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium ${
-            mobilePanel === "clients" ? "text-indigo-600 bg-indigo-50" : "text-slate-600"
+          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium ${
+            mobilePanel === "clients" ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
           }`}
         >
           <Users size={16} />
           Clienti
-          {selectedIds.size > 0 && (
+          {mapIds.size > 0 && (
             <span className="bg-indigo-600 text-white text-[10px] px-1.5 rounded-full">
-              {selectedIds.size}
+              {mapIds.size}
             </span>
           )}
         </button>
@@ -653,8 +795,8 @@ export default function MappaPage() {
             loadHistory();
             setMobilePanel(mobilePanel === "history" ? null : "history");
           }}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium border-l border-slate-200 ${
-            mobilePanel === "history" ? "text-indigo-600 bg-indigo-50" : "text-slate-600"
+          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium border-l border-white/40 ${
+            mobilePanel === "history" ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
           }`}
         >
           <History size={16} />
@@ -669,18 +811,22 @@ export default function MappaPage() {
             className="md:hidden fixed inset-0 z-[600] bg-black/30"
             onClick={() => setMobilePanel(null)}
           />
-          <div className="md:hidden fixed inset-x-0 bottom-[6.75rem] z-[700] bg-white rounded-t-xl border-t border-slate-200 flex flex-col max-h-[55vh] shadow-xl">
-            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-2 mb-1 shrink-0" />
+          <div className="md:hidden fixed inset-x-0 bottom-[6.75rem] z-[700] glass-strong rounded-t-2xl border-t border-white/40 flex flex-col max-h-[55vh]">
+            <div className="w-10 h-1 bg-slate-300/70 rounded-full mx-auto mt-2 mb-1 shrink-0" />
             <div className="flex-1 min-h-0 overflow-hidden">
               {mobilePanel === "clients" ? (
                 <ClientListPanel
                   filtered={filtered}
+                  mapIds={mapIds}
                   selectedIds={selectedIds}
                   onFocus={(id) => {
                     focusClient(id);
                     setMobilePanel(null);
                   }}
-                  onToggleSelect={toggleSelect}
+                  onToggleMap={toggleMap}
+                  onSetIcon={setClientIcon}
+                  onAddAll={addAllFilteredToMap}
+                  onClearMap={clearMap}
                 />
               ) : (
                 <RouteHistoryPanel
@@ -723,8 +869,8 @@ function SideTab({
       onClick={onClick}
       className={`flex-1 py-2.5 text-xs font-medium border-b-2 transition-colors ${
         active
-          ? "border-indigo-600 text-indigo-600"
-          : "border-transparent text-slate-500 hover:text-slate-700"
+          ? "border-indigo-600 text-indigo-600 bg-white/40"
+          : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/30"
       }`}
     >
       {label}

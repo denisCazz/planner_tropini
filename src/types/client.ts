@@ -16,6 +16,7 @@ export interface Client {
   note: string | null;
   stato: StatoCliente;
   urgente: boolean;
+  icona?: string | null;
   ultimaVisita: string | null;
   lat: number | null;
   lng: number | null;

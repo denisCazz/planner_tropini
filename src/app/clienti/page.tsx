@@ -171,7 +171,7 @@ export default function ClientiPage() {
           </button>
           <button
             onClick={openNew}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
           >
             <Plus size={16} />
             Nuovo cliente
@@ -187,7 +187,7 @@ export default function ClientiPage() {
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
           />
           <input
-            className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             placeholder="Cerca per nome, cognome, email, telefono, indirizzo, città, CAP, marca/modello stufa, note..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -199,7 +199,7 @@ export default function ClientiPage() {
             onClick={() => setStatoFilter("")}
             className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
               statoFilter === ""
-                ? "bg-blue-600 text-white border-blue-600"
+                ? "bg-indigo-600 text-white border-indigo-600"
                 : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
             }`}
           >
@@ -212,7 +212,7 @@ export default function ClientiPage() {
               onClick={() => setStatoFilter(s)}
               className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
                 statoFilter === s
-                  ? "bg-blue-600 text-white border-blue-600"
+                  ? "bg-indigo-600 text-white border-indigo-600"
                   : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
               }`}
             >
@@ -223,7 +223,7 @@ export default function ClientiPage() {
       </div>
 
       {/* Tabella — solo desktop */}
-      <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="hidden md:block glass rounded-2xl overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-gray-400">Caricamento...</div>
         ) : clients.length === 0 ? (
@@ -232,7 +232,7 @@ export default function ClientiPage() {
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-white/40 border-b border-white/40">
               <tr>
                 <th className="px-4 py-3 text-left font-medium text-gray-600">
                   <span className="flex items-center gap-1">
@@ -331,7 +331,7 @@ export default function ClientiPage() {
           <div className="py-12 text-center text-gray-400 text-sm">Nessun cliente trovato</div>
         ) : (
           clients.map((c) => (
-            <div key={c.id} className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+            <div key={c.id} className="glass rounded-2xl p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="font-semibold text-gray-900">

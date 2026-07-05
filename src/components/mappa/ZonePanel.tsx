@@ -47,12 +47,12 @@ const ZoneRow = memo(function ZoneRow({
   const phone = c.telefono || c.telefono2;
   return (
     <div
-      className={`px-3 py-2.5 border-b border-slate-100 transition-colors ${
+      className={`px-3 py-2.5 border-b border-white/40 transition-colors ${
         status === "ok"
           ? "bg-emerald-50/70"
           : status === "ko"
             ? "bg-rose-50/60"
-            : "bg-white"
+            : "hover:bg-white/40"
       }`}
     >
       <div className="flex items-start gap-2">
@@ -184,9 +184,9 @@ export default function ZonePanel({
         role="dialog"
         aria-modal="true"
         aria-label="Pianificazione zona"
-        className="pointer-events-auto fixed inset-x-0 bottom-28 md:relative md:inset-auto md:w-full md:max-w-3xl bg-white border border-slate-200 rounded-t-2xl md:rounded-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-11rem)] md:max-h-[85vh] shadow-2xl"
+        className="pointer-events-auto fixed inset-x-0 bottom-28 md:relative md:inset-auto md:w-full md:max-w-3xl glass-strong rounded-t-2xl md:rounded-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-11rem)] md:max-h-[85vh] shadow-2xl"
       >
-      <div className="flex items-start justify-between gap-2 px-4 py-3 md:px-6 md:py-4 bg-indigo-600 text-white shrink-0">
+      <div className="flex items-start justify-between gap-2 px-4 py-3 md:px-6 md:py-4 bg-indigo-600/90 text-white shrink-0">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-sm font-medium">
             <MapPinned size={15} className="shrink-0" />

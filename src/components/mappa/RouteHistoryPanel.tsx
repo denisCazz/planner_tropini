@@ -37,8 +37,8 @@ export default function RouteHistoryPanel({
   onDelete,
 }: RouteHistoryPanelProps) {
   return (
-    <div className="flex flex-col h-full bg-white">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/40 shrink-0">
         <div className="flex items-center gap-2">
           <History size={18} className="text-slate-600" />
           <h2 className="text-sm font-semibold text-slate-900">Storico percorsi</h2>
@@ -63,7 +63,7 @@ export default function RouteHistoryPanel({
         ) : (
           <ul className="divide-y divide-slate-100">
             {entries.map((e) => (
-              <li key={e.id} className="px-4 py-3 hover:bg-slate-50">
+              <li key={e.id} className="px-4 py-3 hover:bg-white/40">
                 <div className="flex items-start gap-3">
                   <button
                     type="button"

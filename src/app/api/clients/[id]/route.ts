@@ -109,27 +109,57 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   }
 
   const body = await req.json();
-  const { lat, lng } = body as { lat?: unknown; lng?: unknown };
+  const { lat, lng, icona } = body as {
+    lat?: unknown;
+    lng?: unknown;
+    icona?: unknown;
+  };
 
-  if (typeof lat !== "number" || typeof lng !== "number") {
+  const hasCoords = lat !== undefined || lng !== undefined;
+  const hasIcona = icona !== undefined;
+
+  if (!hasCoords && !hasIcona) {
     return NextResponse.json(
-      { error: "lat e lng devono essere numeri" },
+      { error: "Nessun campo da aggiornare" },
       { status: 400 }
     );
   }
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return NextResponse.json({ error: "Coordinate non finite" }, { status: 400 });
+
+  const data: { lat?: number; lng?: number; icona?: string | null } = {};
+
+  if (hasCoords) {
+    if (typeof lat !== "number" || typeof lng !== "number") {
+      return NextResponse.json(
+        { error: "lat e lng devono essere numeri" },
+        { status: 400 }
+      );
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return NextResponse.json({ error: "Coordinate non finite" }, { status: 400 });
+    }
+    if (lat < 35 || lat > 48 || lng < 5 || lng > 20) {
+      return NextResponse.json(
+        { error: "Coordinate fuori dall'area Italia prevista" },
+        { status: 400 }
+      );
+    }
+    data.lat = lat;
+    data.lng = lng;
   }
-  if (lat < 35 || lat > 48 || lng < 5 || lng > 20) {
-    return NextResponse.json(
-      { error: "Coordinate fuori dall'area Italia prevista" },
-      { status: 400 }
-    );
+
+  if (hasIcona) {
+    if (icona !== null && typeof icona !== "string") {
+      return NextResponse.json(
+        { error: "icona deve essere una stringa o null" },
+        { status: 400 }
+      );
+    }
+    data.icona = icona === null || icona === "" ? null : (icona as string).slice(0, 16);
   }
 
   const updated = await prisma.client.update({
     where: { id: existing.id },
-    data: { lat, lng },
+    data,
   });
 
   return NextResponse.json(updated);

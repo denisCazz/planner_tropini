@@ -27,15 +27,15 @@ export default function Drawer({ title, open, onClose, children }: DrawerProps) 
     <div className="fixed inset-0 z-50 flex">
       {/* Overlay */}
       <div
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
       {/* Panel */}
       <div
         ref={ref}
-        className="relative ml-auto w-full max-w-lg bg-white h-full shadow-xl flex flex-col"
+        className="relative ml-auto w-full max-w-lg glass-strong h-full shadow-2xl flex flex-col"
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/40">
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
           <button
             onClick={onClose}

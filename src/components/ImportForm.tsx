@@ -69,7 +69,7 @@ export default function ImportForm() {
         onClick={() => inputRef.current?.click()}
         className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
           dragging
-            ? "border-blue-400 bg-blue-50"
+            ? "border-indigo-400 bg-indigo-50"
             : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
         }`}
       >
@@ -81,7 +81,7 @@ export default function ImportForm() {
           onChange={onInputChange}
         />
         {loading ? (
-          <div className="flex flex-col items-center gap-2 text-blue-600">
+          <div className="flex flex-col items-center gap-2 text-indigo-600">
             <Loader2 size={32} className="animate-spin" />
             <span className="text-sm font-medium">Importazione in corso...</span>
           </div>
@@ -111,7 +111,7 @@ export default function ImportForm() {
               </span>
             </div>
             <div className="flex items-center gap-3 px-4 py-3">
-              <CheckCircle size={16} className="text-blue-500" />
+              <CheckCircle size={16} className="text-indigo-500" />
               <span className="text-sm text-gray-700">
                 <strong>{result.updated}</strong> clienti aggiornati
               </span>

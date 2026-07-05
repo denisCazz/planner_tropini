@@ -64,7 +64,7 @@ export default function ImpostazioniPage() {
         <h2 className="text-base font-semibold text-gray-800 mb-3">
           Punto di partenza percorso
         </h2>
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="glass rounded-2xl p-5">
           {loading ? (
             <div className="text-sm text-gray-400">Caricamento...</div>
           ) : (
@@ -74,7 +74,7 @@ export default function ImpostazioniPage() {
                   Indirizzo
                 </label>
                 <input
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
                   placeholder="Via San Giorgio 14, Cavallermaggiore"
@@ -101,7 +101,7 @@ export default function ImpostazioniPage() {
                   type="number"
                   min={1}
                   max={20}
-                  className="w-32 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-32 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={nearestNeighbours}
                   onChange={(e) =>
                     setNearestNeighbours(
@@ -117,7 +117,7 @@ export default function ImpostazioniPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
               >
                 {saving ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -141,7 +141,7 @@ export default function ImpostazioniPage() {
           da Google Earth Pro. I clienti esistenti con le stesse coordinate
           vengono aggiornati (upsert), non duplicati.
         </p>
-        <div className="bg-white border border-gray-200 rounded-xl p-5">
+        <div className="glass rounded-2xl p-5">
           <ImportForm />
         </div>
       </section>

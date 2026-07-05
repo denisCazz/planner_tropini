@@ -98,7 +98,7 @@ export default function LoginForm() {
       </div>
 
       {/* Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10 bg-slate-50">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
         <div className="w-full max-w-[400px]">
           <div className="lg:hidden flex items-center gap-3 mb-8">
             <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center">
@@ -119,7 +119,7 @@ export default function LoginForm() {
 
           <form
             onSubmit={handleSubmit}
-            className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-5"
+            className="glass-strong rounded-2xl shadow-xl p-6 sm:p-8 space-y-5"
           >
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-1.5">
@@ -173,7 +173,7 @@ export default function LoginForm() {
                 <div className="w-full border-t border-slate-100" />
               </div>
               <div className="relative flex justify-center">
-                <span className="bg-white px-3 text-xs text-slate-400">oppure</span>
+                <span className="px-3 text-xs text-slate-400">oppure</span>
               </div>
             </div>
 

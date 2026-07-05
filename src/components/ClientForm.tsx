@@ -101,7 +101,7 @@ export default function ClientForm({
             Nome <span className="text-red-500">*</span>
           </label>
           <input
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.nome}
             onChange={(e) => set("nome", e.target.value)}
             placeholder="Mario"
@@ -112,7 +112,7 @@ export default function ClientForm({
             Cognome
           </label>
           <input
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.cognome}
             onChange={(e) => set("cognome", e.target.value)}
             placeholder="Rossi"
@@ -127,7 +127,7 @@ export default function ClientForm({
           </label>
           <input
             type="email"
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.email}
             onChange={(e) => set("email", e.target.value)}
             placeholder="mario.rossi@email.com"
@@ -139,7 +139,7 @@ export default function ClientForm({
           </label>
           <input
             type="tel"
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.telefono}
             onChange={(e) => set("telefono", e.target.value)}
             placeholder="+39 333 1234567"
@@ -151,7 +151,7 @@ export default function ClientForm({
           </label>
           <input
             type="tel"
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.telefono2}
             onChange={(e) => set("telefono2", e.target.value)}
             placeholder="+39 347 7654321"
@@ -164,7 +164,7 @@ export default function ClientForm({
           Indirizzo
         </label>
         <input
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           value={form.indirizzo}
           onChange={(e) => set("indirizzo", e.target.value)}
           placeholder="Via Roma 1"
@@ -180,7 +180,7 @@ export default function ClientForm({
             Città
           </label>
           <input
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.citta}
             onChange={(e) => set("citta", e.target.value)}
             placeholder="Torino"
@@ -191,7 +191,7 @@ export default function ClientForm({
             CAP
           </label>
           <input
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.cap}
             onChange={(e) => set("cap", e.target.value)}
             placeholder="10100"
@@ -202,7 +202,7 @@ export default function ClientForm({
             Provincia
           </label>
           <input
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.provincia}
             onChange={(e) => set("provincia", e.target.value)}
             placeholder="TO"
@@ -217,7 +217,7 @@ export default function ClientForm({
             Marca Stufa
           </label>
           <input
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.marcaStufa}
             onChange={(e) => set("marcaStufa", e.target.value)}
             placeholder="MCZ"
@@ -228,7 +228,7 @@ export default function ClientForm({
             Modello Stufa
           </label>
           <input
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={form.modelloStufa}
             onChange={(e) => set("modelloStufa", e.target.value)}
             placeholder="Star 3.0"
@@ -304,7 +304,7 @@ export default function ClientForm({
         </label>
         <input
           type="date"
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           value={form.ultimaVisita}
           onChange={(e) => set("ultimaVisita", e.target.value)}
         />
@@ -316,7 +316,7 @@ export default function ClientForm({
         </label>
         <textarea
           rows={3}
-          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
           value={form.note}
           onChange={(e) => set("note", e.target.value)}
           placeholder="Note aggiuntive..."
@@ -327,7 +327,7 @@ export default function ClientForm({
         <button
           type="submit"
           disabled={saving}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2 rounded-md text-sm transition-colors"
+          className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium py-2 rounded-md text-sm transition-colors"
         >
           {saving ? "Salvataggio..." : initial ? "Aggiorna" : "Crea cliente"}
         </button>

@@ -47,7 +47,7 @@ function StatCard({
   href?: string;
 }) {
   const inner = (
-    <div className={`bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex gap-4 items-start hover:shadow-md transition-shadow ${href ? "cursor-pointer" : ""}`}>
+    <div className={`glass rounded-2xl p-4 flex gap-4 items-start hover:shadow-md transition-shadow ${href ? "cursor-pointer" : ""}`}>
       <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${color}`}>
         {icon}
       </div>
@@ -88,7 +88,7 @@ export default function DashboardPage() {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin" />
+          <div className="w-8 h-8 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
           <span className="text-sm text-gray-400">Caricamento...</span>
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function DashboardPage() {
   const maxBrand = data.topBrands[0]?.count ?? 1;
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50">
+    <div className="flex-1 overflow-y-auto">
       <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
 
         {/* Header */}
@@ -116,7 +116,7 @@ export default function DashboardPage() {
             <select
               value={mesi}
               onChange={(e) => setMesi(Number(e.target.value))}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
             >
               {[3, 6, 9, 12, 18, 24].map((m) => (
                 <option key={m} value={m}>{m} mesi</option>
@@ -128,8 +128,8 @@ export default function DashboardPage() {
         {/* Stat cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatCard
-            icon={<Users size={18} className="text-blue-600" />}
-            color="bg-blue-50"
+            icon={<Users size={18} className="text-indigo-600" />}
+            color="bg-indigo-50"
             label="Totale clienti"
             value={data.totalCount}
             href="/clienti"
@@ -168,14 +168,14 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* Urgenti */}
-          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="lg:col-span-2 glass rounded-2xl">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <AlertTriangle size={16} className="text-red-500" />
                 <span className="font-semibold text-gray-900 text-sm">Clienti urgenti</span>
                 <span className="text-xs bg-red-100 text-red-700 rounded-full px-2 py-0.5 font-medium">{data.urgentiCount}</span>
               </div>
-              <Link href="/mappa?urgente=1" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <Link href="/mappa?urgente=1" className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
                 Vedi su mappa <ChevronRight size={12} />
               </Link>
             </div>
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                         ) : (
                           <span className="text-xs text-gray-300">mai</span>
                         )}
-                        <div className="text-xs text-gray-300 mt-0.5 group-hover:text-blue-500">→</div>
+                        <div className="text-xs text-gray-300 mt-0.5 group-hover:text-indigo-500">→</div>
                       </div>
                     </Link>
                   );
@@ -221,7 +221,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Top brands */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+          <div className="glass rounded-2xl">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
               <Flame size={16} className="text-orange-500" />
               <span className="font-semibold text-gray-900 text-sm">Marche stufe</span>
@@ -249,7 +249,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Da visitare */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="glass rounded-2xl">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <UserX size={16} className="text-orange-500" />
@@ -282,7 +282,7 @@ export default function DashboardPage() {
                     return (
                       <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-2.5">
-                          <Link href={`/clienti/${c.id}`} className="font-medium text-gray-900 hover:text-blue-600">
+                          <Link href={`/clienti/${c.id}`} className="font-medium text-gray-900 hover:text-indigo-600">
                             {c.cognome} {c.nome}
                           </Link>
                         </td>
@@ -322,19 +322,19 @@ export default function DashboardPage() {
 
         {/* Footer stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 text-center">
+          <div className="glass rounded-2xl p-4 text-center">
             <div className="text-2xl font-bold text-gray-700">{data.inattivi}</div>
             <div className="text-xs text-gray-400 mt-1">Inattivi</div>
           </div>
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 text-center">
+          <div className="glass rounded-2xl p-4 text-center">
             <div className="text-2xl font-bold text-gray-700">{data.noVisitaCount}</div>
             <div className="text-xs text-gray-400 mt-1">Mai visitati</div>
           </div>
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 text-center">
-            <div className="text-2xl font-bold text-blue-600">{data.recentiCount}</div>
+          <div className="glass rounded-2xl p-4 text-center">
+            <div className="text-2xl font-bold text-indigo-600">{data.recentiCount}</div>
             <div className="text-xs text-gray-400 mt-1">Aggiunti (30gg)</div>
           </div>
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 text-center">
+          <div className="glass rounded-2xl p-4 text-center">
             <div className="text-2xl font-bold text-gray-700">{data.totalCount - data.noVisitaCount}</div>
             <div className="text-xs text-gray-400 mt-1">Con ultima visita</div>
           </div>

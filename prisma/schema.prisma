@@ -60,6 +60,8 @@ model Client {
   note           String?
   stato          StatoCliente @default(PROSPECT)
   urgente        Boolean      @default(false)
+  /// Icona personalizzata del marker sulla mappa (emoji o chiave preset)
+  icona          String?
   ultimaVisita   DateTime?
   lat            Float?
   lng            Float?
