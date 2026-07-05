@@ -25,7 +25,7 @@ export default function NearestRoutePrompt({
         role="dialog"
         aria-modal="true"
         aria-labelledby="nearest-route-title"
-        className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+        className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl overflow-hidden"
       >
         <div className="px-5 pt-5 pb-4">
           <button

@@ -167,9 +167,9 @@ export default function ClientDetailPage({
         </button>
       </div>
 
-      <div className="mb-6 p-4 bg-white rounded-xl border border-gray-200 space-y-3">
+      <div className="mb-6 p-4 glass rounded-2xl space-y-3">
         <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-          <MapPinned size={16} className="text-blue-600" />
+          <MapPinned size={16} className="text-indigo-600" />
           Posizione sulla mappa
         </h2>
         {client.indirizzo ? (
@@ -177,7 +177,7 @@ export default function ClientDetailPage({
             type="button"
             onClick={() => void retryGeocode()}
             disabled={geocodeBusy}
-            className="text-sm px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-50"
+            className="text-sm px-3 py-1.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 disabled:opacity-50"
           >
             {geocodeBusy ? "Geocoding..." : "Ricalcola coordinate dall'indirizzo"}
           </button>
@@ -217,7 +217,7 @@ export default function ClientDetailPage({
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+      <div className="glass rounded-2xl divide-y divide-white/40">
         {[
           { label: "Email", value: client.email },
           { label: "Telefono", value: client.telefono },

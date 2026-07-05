@@ -11,6 +11,7 @@ import {
   History,
   SlidersHorizontal,
   MapPinned,
+  Route,
 } from "lucide-react";
 import type { StatoCliente } from "@/types/client";
 
@@ -28,6 +29,7 @@ interface MapTopBarProps {
   urgenteOnly: boolean;
   onUrgenteOnlyChange: (v: boolean) => void;
   selectedCount: number;
+  mapCount: number;
   filteredCount: number;
   calculating: boolean;
   onCalculateRoute: () => void;
@@ -39,6 +41,8 @@ interface MapTopBarProps {
   onToggleFilters: () => void;
   zoneMode: boolean;
   onToggleZone: () => void;
+  planMode: boolean;
+  onTogglePlan: () => void;
 }
 
 export default function MapTopBar({
@@ -49,6 +53,7 @@ export default function MapTopBar({
   urgenteOnly,
   onUrgenteOnlyChange,
   selectedCount,
+  mapCount,
   filteredCount,
   calculating,
   onCalculateRoute,
@@ -60,16 +65,18 @@ export default function MapTopBar({
   onToggleFilters,
   zoneMode,
   onToggleZone,
+  planMode,
+  onTogglePlan,
 }: MapTopBarProps) {
   const filterActive = statoFilter !== "" || urgenteOnly;
 
   return (
-    <header className="shrink-0 z-30 bg-white border-b border-slate-200">
+    <header className="shrink-0 z-30 glass-strong glass-hi border-b border-white/40">
       <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5">
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:bg-slate-100"
+          className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:bg-white/60"
           title={sidebarOpen ? "Nascondi elenco" : "Mostra elenco"}
         >
           {sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeft size={17} />}
@@ -78,7 +85,7 @@ export default function MapTopBar({
         <div className="flex-1 relative min-w-0">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2 py-2 text-sm focus:outline-none focus:border-indigo-400"
+            className="glass-input w-full rounded-lg pl-8 pr-2 py-2 text-sm"
             placeholder="Cerca..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -90,8 +97,8 @@ export default function MapTopBar({
           onClick={onToggleFilters}
           className={`md:hidden flex items-center justify-center w-9 h-9 rounded-lg border shrink-0 ${
             filterActive || filtersOpen
-              ? "bg-indigo-50 border-indigo-200 text-indigo-600"
-              : "border-slate-200 text-slate-500"
+              ? "bg-indigo-500/15 border-indigo-300 text-indigo-600"
+              : "border-white/50 bg-white/50 text-slate-500"
           }`}
           aria-label="Filtri"
         >
@@ -109,11 +116,25 @@ export default function MapTopBar({
 
         <button
           type="button"
+          onClick={onTogglePlan}
+          className={`flex items-center gap-1.5 px-3 h-9 rounded-lg border text-xs font-medium shrink-0 transition-colors ${
+            planMode
+              ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/30"
+              : "border-white/50 bg-white/50 text-slate-600 hover:bg-white"
+          }`}
+          title="Pianifica: tocca i clienti sulla mappa per creare il percorso"
+        >
+          <Route size={16} />
+          <span className="hidden sm:inline">Pianifica</span>
+        </button>
+
+        <button
+          type="button"
           onClick={onToggleZone}
           className={`hidden md:flex items-center gap-1.5 px-3 h-9 rounded-lg border text-xs font-medium shrink-0 transition-colors ${
             zoneMode
               ? "bg-indigo-600 border-indigo-600 text-white"
-              : "border-slate-200 text-slate-600 hover:bg-slate-50"
+              : "border-white/50 bg-white/50 text-slate-600 hover:bg-white"
           }`}
           title="Lavora a zona: seleziona un'area sulla mappa"
         >
@@ -124,7 +145,7 @@ export default function MapTopBar({
         <button
           type="button"
           onClick={onOpenHistory}
-          className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 shrink-0"
+          className="flex items-center justify-center w-9 h-9 rounded-lg border border-white/50 bg-white/50 text-slate-500 hover:bg-white shrink-0"
           title="Storico percorsi"
         >
           <History size={16} />
@@ -134,8 +155,8 @@ export default function MapTopBar({
           <button
             type="button"
             onClick={onClearSelection}
-            className="hidden sm:flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:bg-slate-100"
-            title="Cancella selezione"
+            className="hidden sm:flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:bg-white/60"
+            title="Cancella selezione percorso"
           >
             <X size={16} />
           </button>
@@ -145,7 +166,7 @@ export default function MapTopBar({
           type="button"
           onClick={onCalculateRoute}
           disabled={calculating || selectedCount < 2}
-          className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-medium px-3 py-2 rounded-lg shrink-0"
+          className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-xs font-medium px-3 py-2 rounded-lg shrink-0 shadow-md shadow-indigo-500/30"
         >
           {calculating ? <Loader2 size={14} className="animate-spin" /> : <Navigation size={14} />}
           <span className="hidden sm:inline">{selectedCount > 0 ? selectedCount : "Percorso"}</span>
@@ -154,7 +175,7 @@ export default function MapTopBar({
 
       {/* Mobile: filtri espandibili */}
       {filtersOpen && (
-        <div className="md:hidden px-3 pb-2.5 border-t border-slate-100 pt-2">
+        <div className="md:hidden px-3 pb-2.5 border-t border-white/40 pt-2">
           <FilterPills
             statoFilter={statoFilter}
             onStatoFilterChange={onStatoFilterChange}
@@ -164,11 +185,13 @@ export default function MapTopBar({
         </div>
       )}
 
-      <div className="hidden md:flex items-center justify-between px-4 py-1 border-t border-slate-100 text-[11px] text-slate-500">
-        <span>{filteredCount} clienti</span>
+      <div className="hidden md:flex items-center justify-between px-4 py-1 border-t border-white/40 text-[11px] text-slate-500">
+        <span>
+          {filteredCount} clienti · {mapCount} sulla mappa
+        </span>
         {selectedCount > 0 && (
           <span className="text-indigo-600 font-medium">
-            {selectedCount} selezionat{selectedCount === 1 ? "o" : "i"}
+            {selectedCount} nel percorso
           </span>
         )}
       </div>

@@ -7,13 +7,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Client, Settings, RouteResult, ZoneBounds } from "@/types/client";
-
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-});
+import { MAP_ICON_PRESETS } from "@/lib/mapIcons";
 
 function escapeHtml(s: string): string {
   return s
@@ -32,63 +26,85 @@ function telHref(raw: string): string {
   return `tel:+${d}`;
 }
 
-const iconCache = new Map<string, L.DivIcon>();
-
-function makeIcon(color: string, label: string | undefined, clientId: number) {
-  // Ogni marker deve avere la propria istanza DivIcon: Leaflet riusa il DOM
-  // e una cache condivisa fa apparire selezionati tutti i pin con stesso colore/stato.
-  const key = `${clientId}:${color}:${label ?? ""}`;
-  const cached = iconCache.get(key);
-  if (cached) return cached;
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
-    <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="${color}" stroke="white" stroke-width="2"/>
-    <circle cx="14" cy="14" r="6" fill="white" opacity="0.9"/>
-    ${label ? `<text x="14" y="18" text-anchor="middle" font-size="9" font-weight="bold" fill="${color}">${label}</text>` : ""}
-  </svg>`;
-  const icon = L.divIcon({
-    html: svg,
-    className: "",
-    iconSize: [28, 36],
-    iconAnchor: [14, 36],
-    popupAnchor: [0, -36],
-  });
-  iconCache.set(key, icon);
-  return icon;
-}
-
 const STATO_COLORS: Record<string, string> = {
   ATTIVO: "#16a34a",
-  INATTIVO: "#6b7280",
+  INATTIVO: "#64748b",
   PROSPECT: "#d97706",
 };
 
+/** Costruisce un DivIcon "pin" vetroso. Ogni marker riceve una nuova istanza:
+ *  Leaflet riusa il DOM e istanze condivise farebbero apparire selezionati
+ *  più pin con lo stesso stato. */
+function makePin(inner: string, extraClass: string, color: string): L.DivIcon {
+  const html = `<div class="cm-pin ${extraClass}" style="--pin-color:${color}">
+    <div class="cm-pin__body"><span class="cm-pin__glyph">${inner}</span></div>
+  </div>`;
+  return L.divIcon({
+    html,
+    className: "",
+    iconSize: [34, 44],
+    iconAnchor: [17, 44],
+    popupAnchor: [0, -40],
+  });
+}
+
+function markerIcon(
+  client: Client,
+  isSelected: boolean,
+  orderNum: number | null
+): L.DivIcon {
+  if (orderNum != null) {
+    return makePin(String(orderNum), "cm-pin--selected", "#4f46e5");
+  }
+  if (isSelected) {
+    return makePin("✓", "cm-pin--selected", "#4f46e5");
+  }
+  if (client.icona) {
+    return makePin(client.icona, "cm-pin--emoji", "#6366f1");
+  }
+  const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#64748b");
+  return makePin(client.urgente ? "!" : "", "", color);
+}
+
 const HOME_ICON = L.divIcon({
-  html: `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-    <circle cx="16" cy="16" r="14" fill="#4f46e5" stroke="white" stroke-width="2"/>
-    <path d="M16 8 L24 15 L22 15 L22 24 L18 24 L18 19 L14 19 L14 24 L10 24 L10 15 L8 15 Z" fill="white"/>
-  </svg>`,
+  html: `<div class="cm-pin" style="--pin-color:#4f46e5">
+    <div class="cm-pin__body"><span class="cm-pin__glyph" style="font-size:15px">🏠</span></div>
+  </div>`,
   className: "",
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32],
+  iconSize: [34, 44],
+  iconAnchor: [17, 44],
+  popupAnchor: [0, -40],
 });
 
-function buildPopupHtml(client: Client, isSelected: boolean): string {
-  return `<div class="min-w-[180px]">
-    <div class="font-bold text-gray-900">${escapeHtml(client.cognome)} ${escapeHtml(client.nome)}</div>
-    ${client.indirizzo ? `<div class="text-xs text-gray-500 mt-1">${escapeHtml(client.indirizzo)}</div>` : ""}
-    ${client.telefono ? `<div class="text-xs text-gray-600 mt-1"><a href="${telHref(client.telefono)}">\uD83D\uDCDE ${escapeHtml(client.telefono)}</a></div>` : ""}
-    <a href="/clienti/${client.id}" class="inline-block mt-2 text-xs text-blue-600 hover:underline">Apri scheda →</a>
-    <br/>
-    <button onclick="window.__toggleClient(${client.id})" class="mt-1 text-xs px-2 py-1 rounded ${isSelected ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700"}">${isSelected ? "Deseleziona" : "Seleziona per percorso"}</button>
+function iconPickerHtml(client: Client): string {
+  const current = client.icona ?? "";
+  const btn = (emoji: string, label: string) => {
+    const active = current === emoji;
+    return `<button type="button" title="${escapeHtml(label)}" onclick="window.__setClientIcon(${client.id}, '${emoji}')" style="width:30px;height:30px;border-radius:9px;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px solid ${active ? "#4f46e5" : "rgba(148,163,184,0.4)"};background:${active ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.7)"}">${emoji}</button>`;
+  };
+  const reset = `<button type="button" title="Predefinita" onclick="window.__setClientIcon(${client.id}, '')" style="width:30px;height:30px;border-radius:9px;font-size:13px;color:#64748b;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px solid ${current === "" ? "#4f46e5" : "rgba(148,163,184,0.4)"};background:${current === "" ? "rgba(99,102,241,0.15)" : "rgba(255,255,255,0.7)"}">✕</button>`;
+  const buttons = MAP_ICON_PRESETS.map((p) => btn(p.emoji, p.label)).join("");
+  return `<div style="margin-top:10px">
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#64748b;font-weight:700;margin-bottom:5px">Icona</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:5px">${reset}${buttons}</div>
   </div>`;
 }
 
-function markerIcon(client: Client, isSelected: boolean) {
-  const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#6b7280");
-  const label = isSelected ? "✓" : client.urgente ? "!" : undefined;
-  return makeIcon(color, label, client.id);
+function buildPopupHtml(client: Client, isSelected: boolean): string {
+  const inRoute = isSelected
+    ? `<button onclick="window.__toggleClient(${client.id})" style="flex:1;padding:7px 10px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#4f46e5;color:#fff">− Togli dal percorso</button>`
+    : `<button onclick="window.__toggleClient(${client.id})" style="flex:1;padding:7px 10px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:rgba(99,102,241,0.15);color:#4338ca">+ Aggiungi al percorso</button>`;
+  return `<div style="min-width:210px">
+    <div style="font-weight:700;color:#0f172a;font-size:14px">${escapeHtml(client.cognome)} ${escapeHtml(client.nome)}</div>
+    ${client.indirizzo ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escapeHtml(client.indirizzo)}</div>` : ""}
+    ${client.telefono ? `<div style="font-size:12px;margin-top:4px"><a href="${telHref(client.telefono)}" style="color:#4f46e5;text-decoration:none">📞 ${escapeHtml(client.telefono)}</a></div>` : ""}
+    ${iconPickerHtml(client)}
+    <div style="display:flex;gap:6px;margin-top:10px">${inRoute}</div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <a href="/clienti/${client.id}" style="flex:1;text-align:center;padding:6px 10px;border-radius:9px;font-size:11px;color:#334155;text-decoration:none;background:rgba(148,163,184,0.18)">Apri scheda →</a>
+      <button onclick="window.__removeFromMap(${client.id})" title="Rimuovi dalla mappa" style="padding:6px 10px;border-radius:9px;font-size:11px;cursor:pointer;border:none;background:rgba(239,68,68,0.12);color:#b91c1c">Rimuovi</button>
+    </div>
+  </div>`;
 }
 
 interface MapProps {
@@ -98,6 +114,12 @@ interface MapProps {
   onToggleSelect: (id: number) => void;
   routeResult: RouteResult | null;
   focusedId?: number | null;
+  /** Modalità "pianifica": il tap sui marker li aggiunge/toglie dal percorso */
+  planMode?: boolean;
+  /** Cambia l'icona rapida di un cliente */
+  onSetIcon?: (id: number, icona: string | null) => void;
+  /** Rimuove un cliente dalla mappa (dai "spuntati") */
+  onRemoveFromMap?: (id: number) => void;
   /** Modalità "disegna zona": disabilita il drag e abilita il rettangolo di selezione */
   zoneMode?: boolean;
   /** Rettangolo zona attivo da mostrare in modo persistente */
@@ -113,6 +135,9 @@ export default function ClientMap({
   onToggleSelect,
   routeResult,
   focusedId,
+  planMode = false,
+  onSetIcon,
+  onRemoveFromMap,
   zoneMode = false,
   zoneBounds = null,
   onZoneDrawn,
@@ -129,10 +154,18 @@ export default function ClientMap({
   const routeStopsKeyRef = useRef<string>("");
   const zoneRectRef = useRef<L.Rectangle | null>(null);
   const onZoneDrawnRef = useRef(onZoneDrawn);
+  const planModeRef = useRef(planMode);
+  const onToggleSelectRef = useRef(onToggleSelect);
 
   useEffect(() => {
     onZoneDrawnRef.current = onZoneDrawn;
   }, [onZoneDrawn]);
+  useEffect(() => {
+    planModeRef.current = planMode;
+  }, [planMode]);
+  useEffect(() => {
+    onToggleSelectRef.current = onToggleSelect;
+  }, [onToggleSelect]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -156,13 +189,9 @@ export default function ClientMap({
       chunkedLoading: true,
       iconCreateFunction: (cluster) => {
         const count = cluster.getChildCount();
-        const size = count < 10 ? 36 : count < 100 ? 42 : 48;
-        const r = size / 2 - 2;
+        const size = count < 10 ? 38 : count < 100 ? 44 : 50;
         return L.divIcon({
-          html: `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-            <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="#4f46e5" stroke="white" stroke-width="2.5" opacity="0.92"/>
-            <text x="${size / 2}" y="${size / 2 + 4}" text-anchor="middle" font-size="${count < 100 ? 13 : 10}" font-weight="bold" fill="white" font-family="sans-serif">${count}</text>
-          </svg>`,
+          html: `<div style="width:${size}px;height:${size}px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:${count < 100 ? 14 : 11}px;background:rgba(79,70,229,0.9);border:2.5px solid rgba(255,255,255,0.85);box-shadow:0 6px 16px rgba(15,23,42,0.3);backdrop-filter:blur(4px)">${count}</div>`,
           className: "",
           iconSize: [size, size],
           iconAnchor: [size / 2, size / 2],
@@ -181,7 +210,7 @@ export default function ClientMap({
     };
   }, []);
 
-  // Sync marker set with visible clients (add / remove only when list changes)
+  // Sincronizza l'insieme dei marker con i clienti visibili (add/remove)
   useEffect(() => {
     const clusterGroup = clusterGroupRef.current;
     if (!clusterGroup) return;
@@ -204,29 +233,42 @@ export default function ClientMap({
       if (markersRef.current.has(client.id)) return;
 
       const marker = L.marker([client.lat, client.lng], {
-        icon: markerIcon(client, false),
+        icon: markerIcon(client, false, null),
       });
       marker.bindPopup(buildPopupHtml(client, false));
+      // Rimuovi l'apertura automatica del popup: la gestiamo a mano per
+      // distinguere il tap "pianifica" dal tap informativo.
+      marker.off("click");
       marker.on("click", (e) => {
         L.DomEvent.stopPropagation(e);
-        onToggleSelect(client.id);
+        if (planModeRef.current) {
+          onToggleSelectRef.current(client.id);
+        } else {
+          const c = clientsByIdRef.current.get(client.id) ?? client;
+          marker.setPopupContent(buildPopupHtml(c, false));
+          marker.openPopup();
+        }
       });
       markersRef.current.set(client.id, marker);
       toAdd.push(marker);
     });
     if (toAdd.length > 0) clusterGroup.addLayers(toAdd);
-  }, [clients, onToggleSelect]);
+  }, [clients]);
 
-  // Update icons and popups when selection changes (no marker churn)
+  // Aggiorna icone e popup quando cambia selezione / percorso / dati cliente
   useEffect(() => {
+    const orderById = new globalThis.Map<number, number>();
+    if (routeResult) {
+      routeResult.steps.forEach((s) => orderById.set(s.client.id, s.order));
+    }
     markersRef.current.forEach((marker, id) => {
       const client = clientsByIdRef.current.get(id);
       if (!client) return;
       const isSelected = selectedIds.has(id);
-      marker.setIcon(markerIcon(client, isSelected));
+      marker.setIcon(markerIcon(client, isSelected, orderById.get(id) ?? null));
       marker.setPopupContent(buildPopupHtml(client, isSelected));
     });
-  }, [selectedIds]);
+  }, [selectedIds, routeResult, clients]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -249,7 +291,7 @@ export default function ClientMap({
     const latlng = marker.getLatLng();
 
     clusterGroup.zoomToShowLayer(marker, () => {
-      marker.openPopup();
+      if (!planModeRef.current) marker.openPopup();
     });
 
     const pulseIcon = L.divIcon({
@@ -278,9 +320,20 @@ export default function ClientMap({
     }, 3000);
   }, [focusedId]);
 
+  // Esponi i callback usati dai bottoni HTML nei popup
   useEffect(() => {
     (window as unknown as Record<string, unknown>).__toggleClient = onToggleSelect;
   }, [onToggleSelect]);
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__setClientIcon = (
+      id: number,
+      icona: string
+    ) => onSetIcon?.(id, icona === "" ? null : icona);
+  }, [onSetIcon]);
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__removeFromMap = (id: number) =>
+      onRemoveFromMap?.(id);
+  }, [onRemoveFromMap]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -297,7 +350,7 @@ export default function ClientMap({
         zIndexOffset: 1000,
       });
       marker.bindPopup(
-        `<div><strong>Punto di partenza</strong><br/><span class="text-xs text-gray-500">${settings.startLabel}</span></div>`
+        `<div><strong>Punto di partenza</strong><br/><span style="font-size:11px;color:#64748b">${escapeHtml(settings.startLabel)}</span></div>`
       );
       marker.addTo(map);
       homeMarkerRef.current = marker;
@@ -319,9 +372,9 @@ export default function ClientMap({
     }
 
     const polyline = L.polyline(routeResult.geometry, {
-        color: "#4f46e5",
+      color: "#4f46e5",
       weight: 4,
-      opacity: 0.8,
+      opacity: 0.85,
     });
     polyline.addTo(map);
     polylineRef.current = polyline;
@@ -387,7 +440,6 @@ export default function ClientMap({
       startLL = null;
       const ne = bounds.getNorthEast();
       const sw = bounds.getSouthWest();
-      // Ignora i tap accidentali (rettangoli troppo piccoli)
       const dxPx = Math.abs(
         map.latLngToContainerPoint(ne).x - map.latLngToContainerPoint(sw).x
       );

@@ -313,9 +313,9 @@ ${qrBlock}
         role="dialog"
         aria-modal="true"
         aria-label="Percorso calcolato"
-        className="pointer-events-auto fixed inset-x-0 bottom-0 md:relative md:inset-auto md:w-full md:max-w-4xl bg-white border border-slate-200 rounded-t-2xl md:rounded-2xl overflow-hidden flex flex-col max-h-[70vh] md:max-h-[85vh] shadow-2xl"
+        className="pointer-events-auto fixed inset-x-0 bottom-0 md:relative md:inset-auto md:w-full md:max-w-4xl glass-strong rounded-t-2xl md:rounded-2xl overflow-hidden flex flex-col max-h-[70vh] md:max-h-[85vh] shadow-2xl"
       >
-      <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-indigo-600 text-white shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 md:px-6 md:py-4 bg-indigo-600/90 text-white shrink-0">
         <div className="flex items-center gap-2 font-semibold text-sm md:text-base">
           <Navigation size={18} />
           Percorso
@@ -328,7 +328,7 @@ ${qrBlock}
         </button>
       </div>
 
-      <div className="flex gap-2 px-4 py-3 md:px-6 border-b border-slate-100 shrink-0">
+      <div className="flex gap-2 px-4 py-3 md:px-6 border-b border-white/40 shrink-0">
         <button
           type="button"
           onClick={() => void handleMarkVisitsToday()}
@@ -349,9 +349,9 @@ ${qrBlock}
         </button>
       </div>
 
-      <ol className="divide-y divide-gray-50 overflow-y-auto flex-1 min-h-0 md:grid md:grid-cols-2 md:divide-y-0 md:gap-px md:bg-slate-100 md:p-1">
+      <ol className="divide-y divide-white/40 overflow-y-auto flex-1 min-h-0 panel-scroll md:grid md:grid-cols-2 md:divide-y-0 md:gap-2 md:p-2">
         {homePoint && (
-          <li className="flex items-center gap-2 px-4 py-3 md:px-5 md:py-4 bg-indigo-50/70 md:bg-white md:rounded-lg">
+          <li className="flex items-center gap-2 px-4 py-3 md:px-5 md:py-4 bg-indigo-50/70 md:bg-white/50 md:rounded-xl md:border md:border-white/50">
             <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
               <Home size={11} />
             </span>
@@ -364,7 +364,7 @@ ${qrBlock}
         {steps.map(({ client, order }, index) => {
           const addr = [client.indirizzo, client.citta].filter(Boolean).join(", ");
           return (
-            <li key={client.id} className="flex items-start gap-3 px-4 py-3 md:px-5 md:py-4 md:bg-white md:rounded-lg">
+            <li key={client.id} className="flex items-start gap-3 px-4 py-3 md:px-5 md:py-4 md:bg-white/50 md:rounded-xl md:border md:border-white/50">
               <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
                 {order}
               </span>
@@ -431,7 +431,7 @@ ${qrBlock}
           );
         })}
         {homePoint && (
-          <li className="flex items-center gap-2 px-4 py-3 md:px-5 md:py-4 bg-indigo-50/70 md:bg-white md:rounded-lg">
+          <li className="flex items-center gap-2 px-4 py-3 md:px-5 md:py-4 bg-indigo-50/70 md:bg-white/50 md:rounded-xl md:border md:border-white/50">
             <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0">
               <Home size={11} />
             </span>

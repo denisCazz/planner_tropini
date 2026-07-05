@@ -21,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it" className={`${geistSans.variable} h-full antialiased`}>
-      <body className="h-full flex bg-gray-50">
+      <body className="h-full flex">
         <AppShell>{children}</AppShell>
         <Toaster position="top-right" richColors />
       </body>

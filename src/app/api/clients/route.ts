@@ -50,6 +50,7 @@ export async function GET(req: NextRequest) {
         citta: true,
         stato: true,
         urgente: true,
+        icona: true,
         marcaStufa: true,
         modelloStufa: true,
         ultimaVisita: true,

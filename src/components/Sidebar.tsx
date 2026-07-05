@@ -46,7 +46,7 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="hidden md:flex w-[4.25rem] shrink-0 bg-slate-900 flex-col items-center py-5 gap-1 border-r border-slate-800">
+      <aside className="hidden md:flex w-[4.25rem] shrink-0 glass-dark flex-col items-center py-5 gap-1 border-r">
         <Link
           href="/dashboard"
           className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center mb-3 shadow-lg shadow-indigo-900/40 hover:bg-indigo-500 transition-colors"
@@ -102,7 +102,7 @@ export default function Sidebar() {
         </button>
       </aside>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 flex items-center justify-around h-14 pb-safe">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 glass-dark border-t flex items-center justify-around h-14 pb-safe">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (
