@@ -1,27 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/geocode";
-import { requireSession } from "@/lib/tenant";
+import { requireAdmin, requireSession } from "@/lib/tenant";
+import { unauthorizedResponse } from "@/lib/auth";
 
 export async function GET() {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  let settings = await prisma.settings.findUnique({
-    where: { organizationId: session!.organizationId },
+  const org = await prisma.organization.findUnique({
+    where: { id: session!.organizationId },
+    select: { id: true },
   });
+  if (!org) return unauthorizedResponse();
 
-  if (!settings) {
-    settings = await prisma.settings.create({
-      data: { organizationId: session!.organizationId },
-    });
-  }
+  const settings = await prisma.settings.upsert({
+    where: { organizationId: session!.organizationId },
+    update: {},
+    create: { organizationId: session!.organizationId },
+  });
 
   return NextResponse.json(settings);
 }
 
 export async function PUT(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { session, error } = await requireAdmin();
   if (error) return error;
 
   const body = await req.json();

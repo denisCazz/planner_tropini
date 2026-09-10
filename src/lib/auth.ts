@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth-constants";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/password";
+import { TROPINI_ORG_SLUG } from "@/lib/tropini";
 
 export { SESSION_COOKIE } from "@/lib/auth-constants";
 
@@ -12,7 +13,7 @@ const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7;
 export type SessionPayload = {
   userId: string;
   username: string;
-  role: "ADMIN" | "USER";
+  role: "ADMIN" | "USER" | "TECNICO";
   organizationId: string;
   organizationName: string;
 };
@@ -35,6 +36,8 @@ export async function authenticateUser(
   });
 
   if (!user?.organizationId || !user.organization) return null;
+  if (user.attivo === false) return null;
+  if (user.organization.slug !== TROPINI_ORG_SLUG) return null;
   if (!verifyPassword(password, user.passwordHash)) return null;
 
   return {
@@ -66,7 +69,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
     if (
       typeof userId !== "string" ||
       typeof username !== "string" ||
-      (role !== "ADMIN" && role !== "USER") ||
+      (role !== "ADMIN" && role !== "USER" && role !== "TECNICO") ||
       typeof organizationId !== "string" ||
       typeof organizationName !== "string"
     ) {
@@ -83,7 +86,24 @@ export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySessionToken(token);
+  const payload = await verifySessionToken(token);
+  if (!payload) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.userId },
+    include: { organization: true },
+  });
+  if (!user?.organizationId || !user.organization) return null;
+  if (user.attivo === false) return null;
+  if (user.organization.slug !== TROPINI_ORG_SLUG) return null;
+
+  return {
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    organizationId: user.organizationId,
+    organizationName: user.organization.name,
+  };
 }
 
 export function sessionCookieOptions(token: string) {

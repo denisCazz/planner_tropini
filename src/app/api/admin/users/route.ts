@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/tenant";
 import { hashPassword } from "@/lib/password";
+import { TROPINI_ORG_SLUG } from "@/lib/tropini";
 
 export async function GET() {
   const { error } = await requireAdmin();
@@ -54,6 +55,12 @@ export async function POST(req: NextRequest) {
   const org = await prisma.organization.findUnique({ where: { id: organizationId } });
   if (!org) {
     return NextResponse.json({ error: "Società non trovata" }, { status: 404 });
+  }
+  if (org.slug !== TROPINI_ORG_SLUG) {
+    return NextResponse.json(
+      { error: "Gli utenti si creano solo per Tropini Service" },
+      { status: 403 }
+    );
   }
 
   const existing = await prisma.user.findUnique({ where: { username } });

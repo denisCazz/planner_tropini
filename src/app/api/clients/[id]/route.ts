@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/geocode";
-import { requireSession, orgScope } from "@/lib/tenant";
+import { requireSession, requireOperator, orgScope, resolveAssignedUser, INVALID_ASSIGNEE } from "@/lib/tenant";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -15,6 +15,38 @@ async function getClientForOrg(id: string, organizationId: string) {
   });
 }
 
+async function clientWithAssignee(id: number) {
+  const row = await prisma.client.findUnique({
+    where: { id },
+    include: {
+      assignedUser: { select: { username: true, nome: true, cognome: true } },
+      plants: { orderBy: { createdAt: "desc" } },
+      addresses: { orderBy: { createdAt: "desc" } },
+      availabilities: { orderBy: { createdAt: "desc" }, take: 20 },
+      interventi: {
+        include: {
+          plant: { select: { id: true, marca: true, modello: true, matricola: true, tipologia: true } },
+          technician: { select: { username: true, nome: true, cognome: true } },
+          appointment: { select: { id: true, date: true, startMin: true, durationMin: true, stato: true, technicianId: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      },
+      appointments: { orderBy: [{ date: "desc" }, { startMin: "asc" }], take: 20 },
+      clientNotes: { where: { plantId: null, interventoId: null }, orderBy: { createdAt: "desc" }, take: 30 },
+      documents: { orderBy: { createdAt: "desc" } },
+    },
+  });
+  if (!row) return null;
+  const { assignedUser, ...c } = row;
+  return {
+    ...c,
+    assignedUserName: assignedUser
+      ? [assignedUser.nome, assignedUser.cognome].filter(Boolean).join(" ").trim() || assignedUser.username
+      : null,
+  };
+}
+
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   const { session, error } = await requireSession();
   if (error) return error;
@@ -26,11 +58,11 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Cliente non trovato" }, { status: 404 });
   }
 
-  return NextResponse.json(client);
+  return NextResponse.json(await clientWithAssignee(client.id));
 }
 
 export async function PUT(req: NextRequest, { params }: RouteParams) {
-  const { session, error } = await requireSession();
+  const { session, error } = await requireOperator();
   if (error) return error;
 
   const { id } = await params;
@@ -43,10 +75,15 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const {
     nome,
     cognome,
+    ragioneSociale,
     email,
     telefono,
     telefono2,
+    codiceFiscale,
+    partitaIva,
+    codiceCliente,
     indirizzo,
+    civico,
     cap,
     citta,
     provincia,
@@ -56,20 +93,38 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     stato,
     urgente,
     ultimaVisita,
+    assignedUserId,
   } = body;
+
+  const assignedId = await resolveAssignedUser(assignedUserId, session!.organizationId);
+  if (assignedId === INVALID_ASSIGNEE) {
+    return NextResponse.json({ error: "Tecnico non valido" }, { status: 400 });
+  }
 
   let lat = existing.lat;
   let lng = existing.lng;
+  let geoStatus = existing.geoStatus;
 
-  if (indirizzo && indirizzo !== existing.indirizzo) {
-    const geo = await geocodeAddress(indirizzo);
+  const addressChanged =
+    indirizzo !== existing.indirizzo ||
+    civico !== existing.civico ||
+    cap !== existing.cap ||
+    citta !== existing.citta;
+
+  if (addressChanged && (indirizzo || citta)) {
+    const query = [indirizzo, civico, cap, citta, provincia].filter(Boolean).join(", ");
+    const geo = await geocodeAddress(query);
     if (geo) {
       lat = geo.lat;
       lng = geo.lng;
+      geoStatus = "ok";
+    } else {
+      geoStatus = "not_found";
     }
-  } else if (!indirizzo) {
+  } else if (!indirizzo && !citta) {
     lat = null;
     lng = null;
+    geoStatus = "missing";
   }
 
   const updated = await prisma.client.update({
@@ -77,10 +132,15 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     data: {
       nome,
       cognome: cognome ?? "",
+      ragioneSociale: ragioneSociale || null,
       email: email || null,
       telefono: telefono || null,
       telefono2: telefono2 || null,
+      codiceFiscale: codiceFiscale || null,
+      partitaIva: partitaIva || null,
+      codiceCliente: codiceCliente || null,
       indirizzo: indirizzo || null,
+      civico: civico || null,
       cap: cap || null,
       citta: citta || null,
       provincia: provincia || null,
@@ -92,10 +152,12 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       ultimaVisita: ultimaVisita ? new Date(ultimaVisita) : null,
       lat,
       lng,
+      geoStatus,
+      assignedUserId: assignedId,
     },
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json(await clientWithAssignee(updated.id));
 }
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
@@ -157,16 +219,16 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     data.icona = icona === null || icona === "" ? null : (icona as string).slice(0, 16);
   }
 
-  const updated = await prisma.client.update({
+  await prisma.client.update({
     where: { id: existing.id },
     data,
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json(await clientWithAssignee(existing.id));
 }
 
 export async function DELETE(_req: NextRequest, { params }: RouteParams) {
-  const { session, error } = await requireSession();
+  const { session, error } = await requireOperator();
   if (error) return error;
 
   const { id } = await params;

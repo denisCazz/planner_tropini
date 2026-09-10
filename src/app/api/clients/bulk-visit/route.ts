@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, orgScope } from "@/lib/tenant";
+import { requireOperator, orgScope } from "@/lib/tenant";
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { session, error } = await requireOperator();
   if (error) return error;
 
   const body = await req.json();

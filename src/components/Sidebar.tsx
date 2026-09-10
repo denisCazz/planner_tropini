@@ -1,22 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Map, Users, Settings, LayoutDashboard, LogOut, Building2 } from "lucide-react";
+import {
+  LayoutDashboard,
+  Users,
+  Wrench,
+  UserCog,
+  CalendarDays,
+  Map,
+  Route,
+  Settings,
+  LogOut,
+} from "lucide-react";
+import { ROLE_LABEL, type SessionRole } from "@/lib/roles";
+import GlobalSearch from "@/components/shell/GlobalSearch";
+import BrandLogo from "@/components/BrandLogo";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/mappa", label: "Mappa", icon: Map },
   { href: "/clienti", label: "Clienti", icon: Users },
-  { href: "/impostazioni", label: "Impostazioni", icon: Settings },
+  { href: "/interventi", label: "Interventi", icon: Wrench },
+  { href: "/calendario", label: "Calendario", icon: CalendarDays },
+  { href: "/pianificazione", label: "Pianificazione", icon: Route },
+  { href: "/mappa", label: "Mappa", icon: Map },
+  { href: "/tecnici", label: "Tecnici", icon: UserCog },
 ];
 
 type SessionInfo = {
   username: string;
-  role: "ADMIN" | "USER";
-  organizationName: string;
+  role: SessionRole;
 };
 
 export default function Sidebar() {
@@ -26,10 +40,16 @@ export default function Sidebar() {
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (r.status === 401) {
+          router.replace(`/login?from=${encodeURIComponent(pathname)}`);
+          return null;
+        }
+        return r.ok ? r.json() : null;
+      })
       .then(setSession)
       .catch(() => setSession(null));
-  }, [pathname]);
+  }, [pathname, router]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -37,84 +57,78 @@ export default function Sidebar() {
     router.refresh();
   }
 
-  const navItems = [
-    ...NAV,
-    ...(session?.role === "ADMIN"
-      ? [{ href: "/admin/societa", label: "Società", icon: Building2 }]
-      : []),
-  ];
+  const items = [...NAV, { href: "/impostazioni", label: "Impostazioni", icon: Settings }];
 
   return (
     <>
-      <aside className="hidden md:flex w-[4.25rem] shrink-0 glass-dark flex-col items-center py-5 gap-1 border-r">
-        <Link
-          href="/dashboard"
-          className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center mb-3 shadow-lg shadow-indigo-900/40 hover:bg-indigo-500 transition-colors"
-          title="Planner"
-        >
-          <Map size={18} className="text-white" />
-        </Link>
+      <aside className="hidden md:flex w-[13.5rem] shrink-0 bg-white border-r border-slate-200 flex-col relative z-30 overflow-visible">
+        <div className="px-4 py-4 border-b border-slate-100">
+          <Link href="/dashboard" className="flex items-center gap-2.5">
+            <BrandLogo variant="mark" className="h-9 w-9 shrink-0" />
+            <div>
+              <div className="text-[15px] font-semibold text-slate-900 tracking-tight leading-tight">
+                Tropini Service
+              </div>
+              <div className="text-[11px] text-teal-700 font-medium">Gestionale operativo</div>
+            </div>
+          </Link>
+        </div>
 
-        {session && (
-          <div
-            className="mb-3 px-1 text-center"
-            title={`${session.organizationName} · ${session.username}`}
-          >
-            <span className="block text-[9px] font-bold uppercase tracking-wider text-cyan-400/90 truncate max-w-[3.5rem]">
-              {session.organizationName.slice(0, 8)}
-            </span>
-          </div>
-        )}
+        <div className="px-3 py-3 border-b border-slate-100 overflow-visible">
+          <GlobalSearch />
+        </div>
 
-        <div className="flex flex-col gap-1 flex-1">
-          {navItems.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
+        <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto panel-scroll">
+          {items.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || pathname.startsWith(`${href}/`);
             return (
               <Link
                 key={href}
                 href={href}
-                title={label}
-                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all group relative ${
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium ${
                   active
-                    ? "bg-white/15 text-white shadow-inner"
-                    : "text-slate-400 hover:bg-white/10 hover:text-white"
+                    ? "bg-teal-50 text-teal-800"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
-                <Icon size={18} strokeWidth={active ? 2.25 : 2} />
-                <span className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 shadow-lg">
-                  {label}
-                </span>
+                <Icon size={17} strokeWidth={active ? 2.25 : 2} />
+                {label}
               </Link>
             );
           })}
-        </div>
+        </nav>
 
-        <button
-          type="button"
-          onClick={handleLogout}
-          title="Esci"
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:bg-white/10 hover:text-white transition-all group relative mt-auto"
-        >
-          <LogOut size={18} />
-          <span className="absolute left-full ml-3 px-2.5 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 shadow-lg">
+        <div className="border-t border-slate-100 p-3">
+          {session && (
+            <div className="px-1 mb-2">
+              <div className="text-sm font-medium text-slate-800 truncate">{session.username}</div>
+              <div className="text-[11px] text-slate-400">{ROLE_LABEL[session.role]}</div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+          >
+            <LogOut size={16} />
             Esci
-          </span>
-        </button>
+          </button>
+        </div>
       </aside>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 glass-dark border-t flex items-center justify-around h-14 pb-safe">
-        {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname.startsWith(href);
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 flex items-center justify-around h-14 pb-safe">
+        {NAV.slice(0, 5).map(({ href, label, icon: Icon }) => {
+          const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors ${
-                active ? "text-indigo-400" : "text-slate-500"
+              className={`flex flex-col items-center gap-0.5 px-1 py-1 ${
+                active ? "text-teal-700" : "text-slate-400"
               }`}
             >
-              <Icon size={20} strokeWidth={active ? 2.25 : 2} />
-              <span className="text-[10px] font-medium">{label}</span>
+              <Icon size={18} />
+              <span className="text-[9px] font-medium">{label}</span>
             </Link>
           );
         })}

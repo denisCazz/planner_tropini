@@ -33,7 +33,7 @@ export default function Drawer({ title, open, onClose, children }: DrawerProps) 
       {/* Panel */}
       <div
         ref={ref}
-        className="relative ml-auto w-full max-w-lg glass-strong h-full shadow-2xl flex flex-col"
+        className="relative ml-auto w-full max-w-lg bg-white h-full shadow-2xl flex flex-col border-l border-slate-200"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/40">
           <h2 className="text-lg font-semibold text-gray-900">{title}</h2>

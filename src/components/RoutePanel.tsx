@@ -242,7 +242,7 @@ export default function RoutePanel({
     win.document.write(`<!DOCTYPE html>
 <html lang="it"><head>
 <meta charset="utf-8">
-<title>Itinerario — Planner Tropini</title>
+<title>Itinerario — Tropini Service</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;padding:36px;color:#111;font-size:13px}
@@ -282,7 +282,7 @@ export default function RoutePanel({
 <header>
   <div>
     <h1>Itinerario di visita</h1>
-    <p>Planner Tropini &mdash; ${today}</p>
+    <p>Tropini Service &mdash; ${today}</p>
   </div>
 </header>
 <div class="summary">
@@ -296,7 +296,7 @@ ${schedBlock}
   <tbody>${homeStartRow}${rows}${homeEndRow}</tbody>
 </table>
 ${qrBlock}
-<footer>Generato automaticamente da Planner Tropini</footer>
+<footer>Generato automaticamente da Tropini Service</footer>
 <script>window.onload=function(){window.print()}</script>
 </body></html>`);
     win.document.close();

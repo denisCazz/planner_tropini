@@ -1,879 +1,409 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo, useTransition } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Users, History, Loader2, MapPinned, Route, MousePointerClick } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Phone, Loader2, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
-import type {
-  Client,
-  Settings,
-  RouteResult,
-  RouteHistoryEntry,
-  StatoCliente,
-  ZoneBounds,
-  CallStatus,
-} from "@/types/client";
-import RoutePanel from "@/components/RoutePanel";
-import MapTopBar from "@/components/mappa/MapTopBar";
-import ClientListPanel from "@/components/mappa/ClientListPanel";
-import NearestRoutePrompt from "@/components/mappa/NearestRoutePrompt";
-import RouteHistoryPanel from "@/components/mappa/RouteHistoryPanel";
-import ZonePanel from "@/components/mappa/ZonePanel";
+import type { Client, Intervento, StatoIntervento } from "@/types/client";
+import { STATO_INTERVENTO, STATO_META, TIPO_LABEL } from "@/lib/status";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { haversineKm } from "@/lib/geo";
+import { useOrgUsers } from "@/lib/useOrgUsers";
+import { technicianDisplayName } from "@/lib/roles";
+import { toLocalDateKey } from "@/lib/dates";
 
-const ClientMap = dynamic(() => import("@/components/Map"), {
+const ClientMap = dynamic(() => import("@/components/map/ClientMap"), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-slate-50">
-      <Loader2 size={22} className="animate-spin text-indigo-500" />
+    <div className="w-full h-full flex items-center justify-center text-slate-400">
+      <Loader2 className="animate-spin" />
     </div>
   ),
 });
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+const InterventionMap = dynamic(() => import("@/components/map/InterventionMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center text-slate-400">
+      <Loader2 className="animate-spin" />
+    </div>
+  ),
+});
+
+function displayName(c: Pick<Client, "nome" | "cognome" | "ragioneSociale">) {
+  const person = [c.cognome, c.nome].filter(Boolean).join(" ").trim();
+  if (c.ragioneSociale && person) return `${c.ragioneSociale} (${person})`;
+  return c.ragioneSociale || person || "Cliente";
 }
 
-/** Ordina i clienti di una zona per priorità di visita:
- *  urgenti prima, poi chi non è mai stato visitato o da più tempo. */
-function zonePriority(a: Client, b: Client): number {
-  if (a.urgente !== b.urgente) return a.urgente ? -1 : 1;
-  const av = a.ultimaVisita ? new Date(a.ultimaVisita).getTime() : 0;
-  const bv = b.ultimaVisita ? new Date(b.ultimaVisita).getTime() : 0;
-  if (av !== bv) return av - bv;
-  return (a.cognome ?? "").localeCompare(b.cognome ?? "", "it");
-}
-
-type MobilePanel = "clients" | "history" | null;
-type DesktopPanel = "clients" | "history";
-
-export default function MappaPage() {
+function MappaContent() {
+  const sp = useSearchParams();
+  const [layer, setLayer] = useState<"clienti" | "interventi">("clienti");
   const [clients, setClients] = useState<Client[]>([]);
-  const [filtered, setFiltered] = useState<Client[]>([]);
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [search, setSearch] = useState("");
-  const [statoFilter, setStatoFilter] = useState<StatoCliente | "">("");
-  const [urgenteOnly, setUrgenteOnly] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [mapIds, setMapIds] = useState<Set<number>>(new Set());
-  const [planMode, setPlanMode] = useState(false);
-  const [focusedId, setFocusedId] = useState<number | null>(null);
-  const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
-  const [calculating, setCalculating] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [desktopPanel, setDesktopPanel] = useState<DesktopPanel>("clients");
-  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
-  const [nearestPrompt, setNearestPrompt] = useState<Client | null>(null);
-  const [routeHistory, setRouteHistory] = useState<RouteHistoryEntry[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevSelectedSizeRef = useRef(0);
-  const [, startFilterTransition] = useTransition();
-
-  // --- Flusso "lavora a zona" ---
-  const [zoneMode, setZoneMode] = useState(false);
-  const [zoneBounds, setZoneBounds] = useState<ZoneBounds | null>(null);
-  const [zoneCandidates, setZoneCandidates] = useState<Client[]>([]);
-  const [zoneStatuses, setZoneStatuses] = useState<Record<number, CallStatus>>({});
-  const [zoneAddedIds, setZoneAddedIds] = useState<Set<number>>(new Set());
-  const [findingClient, setFindingClient] = useState(false);
-
-  const mapClients = useMemo(() => {
-    // Durante la visualizzazione del percorso mostra solo le tappe,
-    // così la mappa resta pulita e si vedono solo i punti del percorso.
-    if (routeResult) {
-      return routeResult.steps.map((s) => s.client);
-    }
-    // Altrimenti mostra SOLO i clienti "spuntati" dall'elenco.
-    return clients.filter((c) => mapIds.has(c.id));
-  }, [clients, mapIds, routeResult]);
-
-  const loadHistory = useCallback(() => {
-    setHistoryLoading(true);
-    fetch("/api/route-history")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: RouteHistoryEntry[]) => setRouteHistory(Array.isArray(data) ? data : []))
-      .catch(() => setRouteHistory([]))
-      .finally(() => setHistoryLoading(false));
-  }, []);
+  const [clientTotal, setClientTotal] = useState(0);
+  const [items, setItems] = useState<Intervento[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [stato, setStato] = useState(sp.get("stato") ?? "");
+  const [tipo, setTipo] = useState("");
+  const [citta, setCitta] = useState("");
+  const [tech, setTech] = useState(sp.get("technicianId") ?? "");
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [radiusKm, setRadiusKm] = useState("");
+  const [date, setDate] = useState(sp.get("date") ?? toLocalDateKey(new Date()));
+  const [routeIds, setRouteIds] = useState<number[]>([]);
+  const [settings, setSettings] = useState<{ startLat: number; startLng: number; startLabel: string } | null>(null);
+  const { users } = useOrgUsers();
+  const qTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/clients?slim=1").then((r) => (r.ok ? r.json() : [])),
-      fetch("/api/settings").then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([clientsData, settingsData]: [Client[], Settings | null]) => {
-        const data: Client[] = Array.isArray(clientsData) ? clientsData : [];
-        setClients(data);
-        setFiltered(data);
-        setSettings(settingsData);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-    loadHistory();
-  }, [loadHistory]);
+    if (qTimer.current) clearTimeout(qTimer.current);
+    qTimer.current = setTimeout(() => setDebouncedQ(q), 300);
+    return () => {
+      if (qTimer.current) clearTimeout(qTimer.current);
+    };
+  }, [q]);
 
-  const reloadClients = useCallback(() => {
-    fetch("/api/clients?slim=1")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((clientsData: Client[]) => {
-        setClients(Array.isArray(clientsData) ? clientsData : []);
-      })
-      .catch(() => {});
-  }, []);
-
-  const nearestCount = Math.min(20, Math.max(1, settings?.nearestNeighbours ?? 4));
-
-  useEffect(() => {
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => {
-      let result = clients;
-      if (statoFilter) result = result.filter((c) => c.stato === statoFilter);
-      if (urgenteOnly) result = result.filter((c) => c.urgente);
-      if (search) {
-        const q = search.toLowerCase();
-        result = result.filter(
-          (c) =>
-            c.nome.toLowerCase().includes(q) ||
-            c.cognome.toLowerCase().includes(q) ||
-            (c.indirizzo ?? "").toLowerCase().includes(q) ||
-            (c.citta ?? "").toLowerCase().includes(q) ||
-            (c.cap ?? "").toLowerCase().includes(q) ||
-            (c.telefono ?? "").toLowerCase().includes(q) ||
-            (c.telefono2 ?? "").toLowerCase().includes(q) ||
-            (c.marcaStufa ?? "").toLowerCase().includes(q) ||
-            (c.modelloStufa ?? "").toLowerCase().includes(q)
-        );
-      }
-      result = [...result].sort((a, b) => {
-        const cmp = (a.cognome ?? "").localeCompare(b.cognome ?? "", "it");
-        return cmp !== 0 ? cmp : (a.nome ?? "").localeCompare(b.nome ?? "", "it");
-      });
-      startFilterTransition(() => setFiltered(result));
-    }, 150);
-  }, [search, statoFilter, urgenteOnly, clients]);
-
-  // Selezione per il PERCORSO (dai marker sulla mappa / popup)
-  const toggleSelect = useCallback((id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    // I clienti selezionati per il percorso sono sempre anche sulla mappa
-    setMapIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-    setRouteResult(null);
-  }, []);
-
-  // Spunta / rimuovi un cliente dalla MAPPA (dall'elenco laterale)
-  const toggleMap = useCallback((id: number) => {
-    setMapIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        setSelectedIds((sel) => {
-          if (!sel.has(id)) return sel;
-          const s = new Set(sel);
-          s.delete(id);
-          return s;
-        });
-        setRouteResult(null);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const removeFromMap = useCallback((id: number) => {
-    setMapIds((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    setSelectedIds((prev) => {
-      if (!prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    setRouteResult(null);
-  }, []);
-
-  const addAllFilteredToMap = useCallback(() => {
-    setMapIds((prev) => {
-      const next = new Set(prev);
-      for (const c of filtered) next.add(c.id);
-      return next;
-    });
-  }, [filtered]);
-
-  const clearMap = useCallback(() => {
-    setMapIds(new Set());
-    setSelectedIds(new Set());
-    setRouteResult(null);
-  }, []);
-
-  const setClientIcon = useCallback(
-    async (id: number, icona: string | null) => {
-      setClients((prev) => prev.map((c) => (c.id === id ? { ...c, icona } : c)));
-      try {
-        const res = await fetch(`/api/clients/${id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ icona }),
-        });
-        if (!res.ok) throw new Error();
-      } catch {
-        toast.error("Impossibile salvare l'icona");
-        reloadClients();
-      }
-    },
-    [reloadClients]
-  );
-
-  useEffect(() => {
-    const prev = prevSelectedSizeRef.current;
-    const curr = selectedIds.size;
-    prevSelectedSizeRef.current = curr;
-    // Durante il flusso "lavora a zona" non proporre il percorso vicini.
-    if (zoneMode || zoneBounds) {
-      setNearestPrompt(null);
-      return;
-    }
-    if (prev === 0 && curr === 1) {
-      const onlyId = [...selectedIds][0];
-      const client = clients.find((c) => c.id === onlyId);
-      if (client) {
-        if (client.lat != null && client.lng != null) {
-          setNearestPrompt(client);
-        } else {
-          toast.error("Cliente senza coordinate sulla mappa");
-        }
-      }
-    }
-    if (curr === 0) setNearestPrompt(null);
-  }, [selectedIds, clients, zoneMode, zoneBounds]);
-
-  const focusClient = useCallback((id: number) => {
-    setFocusedId(id);
-  }, []);
-
-  async function saveToHistory(data: RouteResult, clientIds: number[]) {
+  const loadClients = useCallback(async () => {
+    const p = new URLSearchParams({ slim: "1", hasCoords: "1", limit: "5000" });
+    if (stato) p.set("stato", stato);
+    if (debouncedQ) p.set("search", debouncedQ);
     try {
-      const res = await fetch("/api/route-history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientIds,
-          totalDistance: data.totalDistance,
-          totalDuration: data.totalDuration,
-        }),
-      });
-      if (res.ok) {
-        const entry = await res.json();
-        setRouteHistory((prev) => [entry, ...prev].slice(0, 50));
+      const res = await fetch(`/api/clients?${p}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Impossibile caricare i clienti in mappa");
       }
-    } catch {
-      /* storico opzionale */
-    }
-  }
-
-  async function calculateRoute(
-    idsArg?: Set<number>,
-    options?: { visitOrder?: number[]; saveHistory?: boolean }
-  ) {
-    const ids = idsArg ?? selectedIds;
-    if (ids.size < 2) {
-      toast.error("Seleziona almeno 2 clienti");
-      return;
-    }
-    setCalculating(true);
-    try {
-      const clientIds = options?.visitOrder ?? Array.from(ids);
-      const res = await fetch("/api/route", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientIds,
-          visitOrder: options?.visitOrder,
-        }),
-      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setRouteResult(data);
-      if (options?.saveHistory !== false && !options?.visitOrder) {
-        const orderIds = data.steps.map((s: { client: Client }) => s.client.id);
-        await saveToHistory(data, orderIds);
-      }
+      const list: Client[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      setClients(list);
+      setClientTotal(typeof data?.total === "number" ? data.total : list.length);
+      setLoadError(null);
+      const focus = sp.get("focus");
+      if (focus) setSelectedId(Number(focus));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Errore calcolo percorso");
-    } finally {
-      setCalculating(false);
+      setLoadError(err instanceof Error ? err.message : "Impossibile caricare i clienti in mappa");
     }
-  }
+  }, [stato, debouncedQ, sp]);
 
-  const applyVisitOrder = useCallback(async (visitOrder: number[]) => {
-    if (visitOrder.length < 2) return;
-    setCalculating(true);
+  const loadInterventi = useCallback(async () => {
+    const p = new URLSearchParams({ open: "1", hasCoords: "1", limit: "800" });
+    if (stato) {
+      p.delete("open");
+      p.set("stato", stato);
+    }
+    if (tipo) p.set("tipo", tipo);
+    if (citta) p.set("citta", citta);
+    if (tech) p.set("technicianId", tech);
+    if (debouncedQ) p.set("search", debouncedQ);
     try {
-      const res = await fetch("/api/route", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientIds: visitOrder, visitOrder }),
-      });
+      const res = await fetch(`/api/interventi?${p}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Impossibile caricare gli interventi in mappa");
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setRouteResult(data);
+      const list: Intervento[] = Array.isArray(data) ? data : [];
+      setItems(list);
+      setLoadError(null);
+      const focus = sp.get("focus");
+      if (focus) setSelectedId(Number(focus));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Errore aggiornamento percorso");
-    } finally {
-      setCalculating(false);
+      setLoadError(err instanceof Error ? err.message : "Impossibile caricare gli interventi in mappa");
     }
+  }, [stato, tipo, citta, tech, debouncedQ, sp]);
+
+  useEffect(() => {
+    if (layer === "clienti") void loadClients();
+    else void loadInterventi();
+  }, [layer, loadClients, loadInterventi]);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setSettings)
+      .catch(() => setSettings(null));
   }, []);
 
-  function clearSelection() {
-    setSelectedIds(new Set());
-    setRouteResult(null);
-    setNearestPrompt(null);
-  }
+  const origin = settings ? { lat: settings.startLat, lng: settings.startLng } : { lat: 44.7089, lng: 7.6617 };
 
-  const runNearestRoute = useCallback(
-    async (pivot: Client) => {
-      if (pivot.lat == null || pivot.lng == null) {
-        toast.error("Cliente senza coordinate");
-        return;
-      }
-      const others = clients.filter((c) => c.id !== pivot.id && c.lat !== null && c.lng !== null);
-      if (others.length === 0) {
-        toast.error("Nessun altro cliente con coordinate");
-        return;
-      }
-      const sorted = [...others].sort(
-        (a, b) =>
-          haversineKm(pivot.lat!, pivot.lng!, a.lat!, a.lng!) -
-          haversineKm(pivot.lat!, pivot.lng!, b.lat!, b.lng!)
-      );
-      const nearest = sorted.slice(0, nearestCount);
-      const ids = new Set([pivot.id, ...nearest.map((c) => c.id)]);
-      setSelectedIds(ids);
-      setMapIds((prev) => {
-        const next = new Set(prev);
-        for (const id of ids) next.add(id);
-        return next;
-      });
-      setRouteResult(null);
-      setNearestPrompt(null);
-      setMobilePanel(null);
-      await calculateRoute(ids);
-    },
-    [clients, nearestCount]
-  );
-
-  // --- Flusso "lavora a zona" ---
-  const targetClients = useMemo(
-    () => Math.max(2, (settings?.nearestNeighbours ?? 4) + 1),
-    [settings]
-  );
-
-  const zoneOkCount = useMemo(
-    () => zoneCandidates.filter((c) => zoneStatuses[c.id] === "ok").length,
-    [zoneCandidates, zoneStatuses]
-  );
-
-  const zoneCanFindMore = useMemo(() => {
-    const excluded = new Set(zoneCandidates.map((c) => c.id));
-    return clients.some(
-      (c) => c.lat != null && c.lng != null && !excluded.has(c.id) && zoneStatuses[c.id] !== "ko"
-    );
-  }, [clients, zoneCandidates, zoneStatuses]);
-
-  const closeZone = useCallback(() => {
-    setZoneMode(false);
-    setZoneBounds(null);
-    setZoneCandidates([]);
-    setZoneStatuses({});
-    setZoneAddedIds(new Set());
-    setFindingClient(false);
-  }, []);
-
-  const startZone = useCallback(() => {
-    setSelectedIds(new Set());
-    setRouteResult(null);
-    setNearestPrompt(null);
-    setZoneBounds(null);
-    setZoneCandidates([]);
-    setZoneStatuses({});
-    setZoneAddedIds(new Set());
-    setFindingClient(false);
-    setMobilePanel(null);
-    setZoneMode(true);
-    toast("Disegna un rettangolo sulla mappa per scegliere la zona");
-  }, []);
-
-  const handleZoneDrawn = useCallback(
-    (bounds: ZoneBounds) => {
-      setZoneMode(false);
-      const inZone = clients.filter(
-        (c) =>
-          c.lat != null &&
-          c.lng != null &&
-          c.lat >= bounds.south &&
-          c.lat <= bounds.north &&
-          c.lng >= bounds.west &&
-          c.lng <= bounds.east
-      );
-      const sorted = [...inZone].sort(zonePriority);
-      setZoneBounds(bounds);
-      setZoneCandidates(sorted);
-      setZoneStatuses({});
-      setZoneAddedIds(new Set());
-      if (sorted.length === 0) {
-        toast.error("Nessun cliente con coordinate in questa zona");
-      } else {
-        toast.success(`${sorted.length} client${sorted.length === 1 ? "e" : "i"} nella zona`);
-      }
-    },
-    [clients]
-  );
-
-  const setZoneStatus = useCallback((id: number, status: CallStatus | null) => {
-    setZoneStatuses((prev) => {
-      const next = { ...prev };
-      if (status === null) delete next[id];
-      else next[id] = status;
-      return next;
+  const filteredClients = useMemo(() => {
+    const km = parseFloat(radiusKm);
+    let list = clients;
+    if (citta.trim()) {
+      const needle = citta.trim().toLowerCase();
+      list = list.filter((c) => (c.citta ?? "").toLowerCase().includes(needle));
+    }
+    if (!Number.isFinite(km) || km <= 0) return list;
+    return list.filter((c) => {
+      if (c.lat == null || c.lng == null) return false;
+      return haversineKm(origin.lat, origin.lng, c.lat, c.lng) <= km;
     });
-  }, []);
+  }, [clients, radiusKm, origin.lat, origin.lng, citta]);
 
-  const findAnotherClient = useCallback(() => {
-    setFindingClient(true);
-    try {
-      const okClients = zoneCandidates.filter(
-        (c) => zoneStatuses[c.id] === "ok" && c.lat != null && c.lng != null
-      );
-      const ref =
-        okClients.length > 0
-          ? {
-              lat: okClients.reduce((s, c) => s + c.lat!, 0) / okClients.length,
-              lng: okClients.reduce((s, c) => s + c.lng!, 0) / okClients.length,
-            }
-          : zoneBounds
-            ? {
-                lat: (zoneBounds.north + zoneBounds.south) / 2,
-                lng: (zoneBounds.east + zoneBounds.west) / 2,
-              }
-            : null;
-      if (!ref) return;
+  const filteredInterventi = useMemo(() => {
+    const km = parseFloat(radiusKm);
+    if (!Number.isFinite(km) || km <= 0) return items;
+    return items.filter((i) => {
+      if (i.client?.lat == null || i.client.lng == null) return false;
+      return haversineKm(origin.lat, origin.lng, i.client.lat, i.client.lng) <= km;
+    });
+  }, [items, radiusKm, origin.lat, origin.lng]);
 
-      const excluded = new Set(zoneCandidates.map((c) => c.id));
-      const pool = clients.filter(
-        (c) =>
-          c.lat != null &&
-          c.lng != null &&
-          !excluded.has(c.id) &&
-          zoneStatuses[c.id] !== "ko"
-      );
-      if (pool.length === 0) {
-        toast.error("Nessun altro cliente disponibile");
-        return;
-      }
+  const selectedClient = filteredClients.find((c) => c.id === selectedId) ?? null;
+  const selectedIntervento = filteredInterventi.find((i) => i.id === selectedId) ?? null;
 
-      let best = pool[0];
-      let bestDist = haversineKm(ref.lat, ref.lng, best.lat!, best.lng!);
-      for (const c of pool) {
-        const d = haversineKm(ref.lat, ref.lng, c.lat!, c.lng!);
-        if (d < bestDist) {
-          best = c;
-          bestDist = d;
-        }
-      }
-
-      setZoneCandidates((prev) => [...prev, best]);
-      setZoneAddedIds((prev) => {
-        const next = new Set(prev);
-        next.add(best.id);
-        return next;
-      });
-      setZoneStatuses((prev) => ({ ...prev, [best.id]: "ok" }));
-      setFocusedId(best.id);
-      const name = [best.cognome, best.nome].filter(Boolean).join(" ");
-      toast.success(`Aggiunto ${name} a ${bestDist.toFixed(1)} km`);
-    } finally {
-      setFindingClient(false);
-    }
-  }, [clients, zoneCandidates, zoneStatuses, zoneBounds]);
-
-  const planZoneRoute = useCallback(async () => {
-    const okIds = zoneCandidates
-      .filter((c) => zoneStatuses[c.id] === "ok")
-      .map((c) => c.id);
-    if (okIds.length < 2) {
-      toast.error("Segna almeno 2 clienti come OK");
+  async function changeStato(next: StatoIntervento) {
+    if (!selectedIntervento) return;
+    const res = await fetch(`/api/interventi/${selectedIntervento.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stato: next }),
+    });
+    if (!res.ok) {
+      toast.error("Stato non aggiornato");
       return;
     }
-    const ids = new Set(okIds);
-    setSelectedIds(ids);
-    setMapIds((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.add(id);
-      return next;
-    });
-    await calculateRoute(ids);
-    closeZone();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneCandidates, zoneStatuses, closeZone]);
-
-  async function restoreFromHistory(entry: RouteHistoryEntry) {
-    setSelectedIds(new Set(entry.clientIds));
-    setMapIds((prev) => {
-      const next = new Set(prev);
-      for (const id of entry.clientIds) next.add(id);
-      return next;
-    });
-    setMobilePanel(null);
-    setDesktopPanel("clients");
-    await calculateRoute(new Set(entry.clientIds), {
-      visitOrder: entry.clientIds,
-      saveHistory: false,
-    });
-    toast.success("Percorso ripristinato");
+    toast.success("Stato aggiornato");
+    void loadInterventi();
   }
 
-  async function deleteHistoryEntry(id: number) {
-    const res = await fetch(`/api/route-history/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      setRouteHistory((prev) => prev.filter((e) => e.id !== id));
+  async function loadRoute() {
+    if (!tech) {
+      toast.error("Seleziona un tecnico");
+      return;
     }
+    const res = await fetch(`/api/planning?date=${date}&technicianId=${tech}`);
+    const data = await res.json();
+    const ids = (data.appointments ?? [])
+      .map((a: { interventoId?: number | null }) => a.interventoId)
+      .filter((id: number | null | undefined): id is number => typeof id === "number");
+    setRouteIds(ids);
   }
-
-  function openHistory() {
-    loadHistory();
-    if (window.matchMedia("(min-width: 768px)").matches) {
-      setSidebarOpen(true);
-      setDesktopPanel("history");
-    } else {
-      setMobilePanel("history");
-    }
-  }
-
-  const togglePlan = useCallback(() => {
-    setPlanMode((v) => {
-      const next = !v;
-      if (next) {
-        setZoneMode(false);
-        setZoneBounds(null);
-        setNearestPrompt(null);
-      }
-      return next;
-    });
-  }, []);
-
-  const sharePhone = process.env.NEXT_PUBLIC_SHARE_PHONE;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <MapTopBar
-        search={search}
-        onSearchChange={setSearch}
-        statoFilter={statoFilter}
-        onStatoFilterChange={setStatoFilter}
-        urgenteOnly={urgenteOnly}
-        onUrgenteOnlyChange={setUrgenteOnly}
-        selectedCount={selectedIds.size}
-        mapCount={mapIds.size}
-        filteredCount={filtered.length}
-        calculating={calculating}
-        onCalculateRoute={() => calculateRoute()}
-        onClearSelection={clearSelection}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
-        onOpenHistory={openHistory}
-        filtersOpen={filtersOpen}
-        onToggleFilters={() => setFiltersOpen((v) => !v)}
-        zoneMode={zoneMode}
-        onToggleZone={() => (zoneMode || zoneBounds ? closeZone() : startZone())}
-        planMode={planMode}
-        onTogglePlan={togglePlan}
-      />
-
-      <div className="flex flex-1 min-h-0 relative">
-        {sidebarOpen && (
-          <aside className="hidden md:flex w-72 shrink-0 border-r border-white/40 glass-strong flex-col">
-            <div className="flex border-b border-white/40 shrink-0">
-              <SideTab
-                active={desktopPanel === "clients"}
-                onClick={() => setDesktopPanel("clients")}
-                label="Clienti"
-              />
-              <SideTab
-                active={desktopPanel === "history"}
+    <div className="h-full flex flex-col">
+      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[300px_1fr]">
+        <aside className="border-r border-slate-200 bg-white flex flex-col min-h-0">
+          <div className="p-3 border-b border-slate-100 space-y-2 shrink-0">
+            <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs font-medium">
+              <button
+                type="button"
+                className={`flex-1 rounded-md py-1.5 ${layer === "clienti" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}
                 onClick={() => {
-                  setDesktopPanel("history");
-                  loadHistory();
+                  setLayer("clienti");
+                  setSelectedId(null);
+                  setStato("");
                 }}
-                label="Storico"
-              />
+              >
+                Clienti
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded-md py-1.5 ${layer === "interventi" ? "bg-white shadow-sm text-slate-900" : "text-slate-500"}`}
+                onClick={() => {
+                  setLayer("interventi");
+                  setSelectedId(null);
+                  setStato("");
+                }}
+              >
+                Interventi
+              </button>
             </div>
-            <div className="flex-1 min-h-0">
-              {desktopPanel === "clients" ? (
-                <ClientListPanel
-                  filtered={filtered}
-                  mapIds={mapIds}
-                  selectedIds={selectedIds}
-                  onFocus={focusClient}
-                  onToggleMap={toggleMap}
-                  onSetIcon={setClientIcon}
-                  onAddAll={addAllFilteredToMap}
-                  onClearMap={clearMap}
-                />
-              ) : (
-                <RouteHistoryPanel
-                  entries={routeHistory}
-                  loading={historyLoading}
-                  onClose={() => setDesktopPanel("clients")}
-                  onRestore={restoreFromHistory}
-                  onDelete={deleteHistoryEntry}
-                />
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <SlidersHorizontal size={12} /> Filtri
+            </div>
+            <input className="field" placeholder="Cerca cliente o città" value={q} onChange={(e) => setQ(e.target.value)} />
+            {layer === "clienti" ? (
+              <label className="block text-[11px] font-medium text-slate-500">
+                Stato
+                <select className="field mt-1" value={stato} onChange={(e) => setStato(e.target.value)}>
+                  <option value="">Tutti</option>
+                  <option value="ATTIVO">Attivi</option>
+                  <option value="INATTIVO">Inattivi</option>
+                  <option value="PROSPECT">Prospect</option>
+                </select>
+              </label>
+            ) : (
+              <>
+                <label className="block text-[11px] font-medium text-slate-500">
+                  Stato
+                  <select className="field mt-1" value={stato} onChange={(e) => setStato(e.target.value)}>
+                    <option value="">Aperti</option>
+                    {STATO_INTERVENTO.map((s) => (
+                      <option key={s} value={s}>{STATO_META[s].label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-[11px] font-medium text-slate-500">
+                  Tipo
+                  <select className="field mt-1" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+                    <option value="">Tutti</option>
+                    {Object.entries(TIPO_LABEL).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-[11px] font-medium text-slate-500">
+                  Tecnico
+                  <select className="field mt-1" value={tech} onChange={(e) => setTech(e.target.value)}>
+                    <option value="">Tutti</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>{technicianDisplayName(u)}</option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+            <label className="block text-[11px] font-medium text-slate-500">
+              Città
+              <input className="field mt-1" placeholder="es. Carmagnola" value={citta} onChange={(e) => setCitta(e.target.value)} />
+            </label>
+            <label className="block text-[11px] font-medium text-slate-500">
+              Raggio km (da sede)
+              <input className="field mt-1" inputMode="numeric" placeholder="es. 20" value={radiusKm} onChange={(e) => setRadiusKm(e.target.value)} />
+            </label>
+            {layer === "interventi" && (
+              <div className="flex gap-2">
+                <input type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} />
+                <button type="button" className="btn btn-ghost text-xs shrink-0" onClick={() => void loadRoute()}>
+                  Percorso
+                </button>
+              </div>
+            )}
+            <p className="text-[11px] text-slate-400">
+              {layer === "clienti"
+                ? `${filteredClients.length} clienti in mappa${clientTotal > filteredClients.length ? ` · ${clientTotal} con GPS` : ""}`
+                : `${filteredInterventi.length} interventi in mappa`}
+            </p>
+            {loadError && <p className="text-xs text-red-600">{loadError}</p>}
+          </div>
+          <div className="flex-1 overflow-y-auto panel-scroll">
+            {layer === "clienti"
+              ? filteredClients.slice(0, 400).map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedId(c.id)}
+                    className={`w-full text-left px-3 py-2.5 border-b border-slate-100 ${
+                      selectedId === c.id ? "bg-teal-50" : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="font-medium text-sm truncate">{displayName(c)}</div>
+                    <div className="text-xs text-slate-500">{c.citta ?? "—"}</div>
+                  </button>
+                ))
+              : filteredInterventi.map((i) => (
+                  <button
+                    key={i.id}
+                    type="button"
+                    onClick={() => setSelectedId(i.id)}
+                    className={`w-full text-left px-3 py-2.5 border-b border-slate-100 ${
+                      selectedId === i.id ? "bg-teal-50" : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm truncate">{i.client?.displayName}</span>
+                      <span className="ml-auto"><StatusBadge stato={i.stato} /></span>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {i.client?.citta ?? "—"} · {TIPO_LABEL[i.tipo]}
+                    </div>
+                  </button>
+                ))}
+            {layer === "clienti" && filteredClients.length === 0 && (
+              <p className="p-4 text-sm text-slate-400">Nessun cliente geolocalizzato</p>
+            )}
+            {layer === "interventi" && filteredInterventi.length === 0 && (
+              <p className="p-4 text-sm text-slate-400">Nessun intervento geolocalizzato</p>
+            )}
+          </div>
+        </aside>
+        <div className="relative min-h-[50vh]">
+          {layer === "clienti" ? (
+            <ClientMap
+              items={filteredClients}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              start={settings ? { lat: settings.startLat, lng: settings.startLng, label: settings.startLabel } : undefined}
+            />
+          ) : (
+            <InterventionMap
+              items={filteredInterventi}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              routeIds={routeIds}
+              start={settings ? { lat: settings.startLat, lng: settings.startLng, label: settings.startLabel } : undefined}
+            />
+          )}
+          {layer === "clienti" && selectedClient && (
+            <div className="absolute bottom-4 left-4 right-4 md:left-auto md:w-80 card p-4 shadow-lg">
+              <div className="font-semibold">{displayName(selectedClient)}</div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                {selectedClient.indirizzo}<br />
+                {selectedClient.citta}
+              </div>
+              {selectedClient.telefono && (
+                <a href={`tel:${selectedClient.telefono}`} className="text-sm text-teal-700 mt-1 inline-flex items-center gap-1">
+                  <Phone size={13} /> {selectedClient.telefono}
+                </a>
               )}
-            </div>
-          </aside>
-        )}
-
-        <div className="flex-1 relative min-w-0">
-          {loading && (
-            <div className="absolute inset-0 z-[500] bg-white/40 backdrop-blur-sm flex items-center justify-center">
-              <Loader2 size={28} className="text-indigo-500 animate-spin" />
-            </div>
-          )}
-
-          {calculating && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] glass-strong rounded-full px-3 py-1.5 text-xs font-medium text-slate-700 flex items-center gap-2">
-              <Loader2 size={14} className="animate-spin text-indigo-600" />
-              Calcolo...
-            </div>
-          )}
-
-          {!loading && mapIds.size === 0 && !routeResult && !zoneMode && !zoneBounds && (
-            <div className="pointer-events-none absolute inset-x-0 top-16 z-[400] flex justify-center px-4">
-              <div className="glass-strong rounded-2xl px-4 py-3 text-center max-w-xs">
-                <MousePointerClick size={18} className="mx-auto text-indigo-500 mb-1" />
-                <p className="text-xs text-slate-600">
-                  Spunta i clienti nell&apos;elenco per mostrarli sulla mappa.
-                </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {selectedClient.telefono && (
+                  <a className="btn btn-primary text-xs py-1" href={`tel:${selectedClient.telefono}`}>Chiama</a>
+                )}
+                <Link className="btn btn-ghost text-xs py-1" href={`/clienti/${selectedClient.id}`}>Vedi cliente</Link>
               </div>
             </div>
           )}
-
-          <ClientMap
-            clients={mapClients}
-            settings={settings}
-            selectedIds={selectedIds}
-            onToggleSelect={toggleSelect}
-            routeResult={routeResult}
-            focusedId={focusedId}
-            planMode={planMode}
-            onSetIcon={setClientIcon}
-            onRemoveFromMap={removeFromMap}
-            zoneMode={zoneMode}
-            zoneBounds={zoneBounds}
-            onZoneDrawn={handleZoneDrawn}
-          />
-
-          {planMode && !routeResult && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 glass-strong rounded-full pl-3 pr-1.5 py-1.5 text-xs font-medium text-slate-700 shadow-lg">
-              <Route size={14} className="text-indigo-600" />
-              {selectedIds.size >= 2
-                ? `${selectedIds.size} tappe · tocca "Percorso"`
-                : "Modalità pianifica: tocca i clienti sulla mappa"}
-              <button
-                type="button"
-                onClick={togglePlan}
-                className="ml-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-0.5 text-[11px]"
+          {layer === "interventi" && selectedIntervento && (
+            <div className="absolute bottom-4 left-4 right-4 md:left-auto md:w-80 card p-4 shadow-lg">
+              <div className="font-semibold">{selectedIntervento.client?.displayName}</div>
+              <div className="text-xs text-slate-500 mt-0.5">
+                {selectedIntervento.client?.indirizzo}<br />
+                {selectedIntervento.client?.citta}
+              </div>
+              {selectedIntervento.client?.telefono && (
+                <a href={`tel:${selectedIntervento.client.telefono}`} className="text-sm text-teal-700 mt-1 inline-flex items-center gap-1">
+                  <Phone size={13} /> {selectedIntervento.client.telefono}
+                </a>
+              )}
+              <div className="mt-2 text-sm">
+                {TIPO_LABEL[selectedIntervento.tipo]} · {selectedIntervento.durataStimata} min
+                {selectedIntervento.technicianName ? ` · ${selectedIntervento.technicianName}` : ""}
+              </div>
+              <div className="mt-2"><StatusBadge stato={selectedIntervento.stato} /></div>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                {selectedIntervento.client?.telefono && (
+                  <a className="btn btn-primary text-xs py-1" href={`tel:${selectedIntervento.client.telefono}`}>Chiama</a>
+                )}
+                <Link className="btn btn-ghost text-xs py-1" href={`/clienti/${selectedIntervento.clientId}`}>Vedi cliente</Link>
+                <Link className="btn btn-ghost text-xs py-1" href={`/pianificazione?interventoId=${selectedIntervento.id}`}>Pianifica</Link>
+              </div>
+              <select
+                className="field mt-2 text-xs"
+                value={selectedIntervento.stato}
+                onChange={(e) => void changeStato(e.target.value as StatoIntervento)}
               >
-                Fine
-              </button>
+                {STATO_INTERVENTO.map((s) => (
+                  <option key={s} value={s}>{STATO_META[s].label}</option>
+                ))}
+              </select>
             </div>
-          )}
-
-          {zoneMode && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[600] flex items-center gap-2 bg-indigo-600 text-white rounded-full pl-3 pr-1.5 py-1.5 text-xs font-medium shadow-lg">
-              <MapPinned size={14} />
-              Disegna la zona sulla mappa
-              <button
-                type="button"
-                onClick={closeZone}
-                className="ml-1 rounded-full bg-white/20 hover:bg-white/30 px-2 py-0.5 text-[11px]"
-              >
-                Annulla
-              </button>
-            </div>
-          )}
-
-          {zoneBounds && !routeResult && (
-            <ZonePanel
-              candidates={zoneCandidates}
-              statuses={zoneStatuses}
-              addedIds={zoneAddedIds}
-              okCount={zoneOkCount}
-              target={targetClients}
-              calculating={calculating}
-              finding={findingClient}
-              canFindMore={zoneCanFindMore}
-              onSetStatus={setZoneStatus}
-              onFocus={focusClient}
-              onFindAnother={findAnotherClient}
-              onPlan={() => void planZoneRoute()}
-              onClose={closeZone}
-            />
-          )}
-
-          {routeResult && (
-            <RoutePanel
-              result={routeResult}
-              onClose={() => setRouteResult(null)}
-              sharePhone={sharePhone}
-              settings={settings}
-              onVisitsLogged={reloadClients}
-              onVisitOrderChange={applyVisitOrder}
-            />
           )}
         </div>
       </div>
-
-      {/* Mobile: barra azioni sopra nav */}
-      <div className="md:hidden fixed bottom-14 inset-x-0 z-[500] flex border-t border-white/40 glass-strong">
-        <button
-          type="button"
-          onClick={togglePlan}
-          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium border-r border-white/40 ${
-            planMode ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
-          }`}
-        >
-          <Route size={16} />
-          Pianifica
-        </button>
-        <button
-          type="button"
-          onClick={() => (zoneMode || zoneBounds ? closeZone() : startZone())}
-          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium border-r border-white/40 ${
-            zoneMode || zoneBounds ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
-          }`}
-        >
-          <MapPinned size={16} />
-          Zona
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobilePanel(mobilePanel === "clients" ? null : "clients")}
-          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium ${
-            mobilePanel === "clients" ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
-          }`}
-        >
-          <Users size={16} />
-          Clienti
-          {mapIds.size > 0 && (
-            <span className="bg-indigo-600 text-white text-[10px] px-1.5 rounded-full">
-              {mapIds.size}
-            </span>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            loadHistory();
-            setMobilePanel(mobilePanel === "history" ? null : "history");
-          }}
-          className={`flex-1 flex items-center justify-center gap-1 py-2.5 text-xs font-medium border-l border-white/40 ${
-            mobilePanel === "history" ? "text-indigo-600 bg-indigo-500/10" : "text-slate-600"
-          }`}
-        >
-          <History size={16} />
-          Storico
-        </button>
-      </div>
-
-      {/* Mobile sheet */}
-      {mobilePanel && (
-        <>
-          <div
-            className="md:hidden fixed inset-0 z-[600] bg-black/30"
-            onClick={() => setMobilePanel(null)}
-          />
-          <div className="md:hidden fixed inset-x-0 bottom-[6.75rem] z-[700] glass-strong rounded-t-2xl border-t border-white/40 flex flex-col max-h-[55vh]">
-            <div className="w-10 h-1 bg-slate-300/70 rounded-full mx-auto mt-2 mb-1 shrink-0" />
-            <div className="flex-1 min-h-0 overflow-hidden">
-              {mobilePanel === "clients" ? (
-                <ClientListPanel
-                  filtered={filtered}
-                  mapIds={mapIds}
-                  selectedIds={selectedIds}
-                  onFocus={(id) => {
-                    focusClient(id);
-                    setMobilePanel(null);
-                  }}
-                  onToggleMap={toggleMap}
-                  onSetIcon={setClientIcon}
-                  onAddAll={addAllFilteredToMap}
-                  onClearMap={clearMap}
-                />
-              ) : (
-                <RouteHistoryPanel
-                  entries={routeHistory}
-                  loading={historyLoading}
-                  onClose={() => setMobilePanel(null)}
-                  onRestore={restoreFromHistory}
-                  onDelete={deleteHistoryEntry}
-                />
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {nearestPrompt && (
-        <NearestRoutePrompt
-          client={nearestPrompt}
-          nearestCount={nearestCount}
-          onConfirm={() => runNearestRoute(nearestPrompt)}
-          onDismiss={() => setNearestPrompt(null)}
-        />
-      )}
     </div>
   );
 }
 
-function SideTab({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
+export default function MappaPage() {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex-1 py-2.5 text-xs font-medium border-b-2 transition-colors ${
-        active
-          ? "border-indigo-600 text-indigo-600 bg-white/40"
-          : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/30"
-      }`}
-    >
-      {label}
-    </button>
+    <Suspense fallback={<div className="p-8 text-slate-400">Caricamento mappa…</div>}>
+      <MappaContent />
+    </Suspense>
   );
 }

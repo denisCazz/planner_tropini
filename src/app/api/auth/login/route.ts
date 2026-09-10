@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const session = await authenticateUser(username, password);
   if (!session) {
     return NextResponse.json(
-      { error: "Credenziali non valide" },
+      { error: "Credenziali non valide o accesso non consentito" },
       { status: 401 }
     );
   }

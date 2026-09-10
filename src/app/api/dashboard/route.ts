@@ -1,96 +1,80 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, orgScope } from "@/lib/tenant";
+import { requireSession, orgScope, ownTechnicianFilter } from "@/lib/tenant";
+import { toLocalDateKey, addDaysToDateKey, parseDateKey } from "@/lib/dates";
+import { technicianDisplayName } from "@/lib/roles";
 
-export async function GET(req: NextRequest) {
+function mapApt(a: {
+  id: number;
+  startMin: number;
+  durationMin: number;
+  stato: string;
+  tipo: string;
+  clientId: number;
+  technician: { username: string; nome: string | null; cognome: string | null } | null;
+  client: { nome: string; cognome: string; citta: string | null; telefono: string | null };
+}) {
+  return {
+    id: a.id,
+    startMin: a.startMin,
+    durationMin: a.durationMin,
+    stato: a.stato,
+    tipo: a.tipo,
+    technicianName: a.technician ? technicianDisplayName(a.technician) : null,
+    clientName: [a.client.cognome, a.client.nome].filter(Boolean).join(" "),
+    citta: a.client.citta,
+    telefono: a.client.telefono,
+    clientId: a.clientId,
+  };
+}
+
+const include = {
+  technician: { select: { username: true, nome: true, cognome: true } },
+  client: { select: { nome: true, cognome: true, citta: true, telefono: true } },
+} as const;
+
+export async function GET() {
   const { session, error } = await requireSession();
   if (error) return error;
 
-  const { searchParams } = new URL(req.url);
-  const mesi = Math.max(1, parseInt(searchParams.get("mesi") ?? "6"));
   const org = orgScope(session!.organizationId);
+  const own = ownTechnicianFilter(session!);
+  const today = toLocalDateKey(new Date());
+  const tomorrow = addDaysToDateKey(today, 1);
+  const todayDate = parseDateKey(today)!;
+  const tomorrowDate = parseDateKey(tomorrow)!;
 
-  const now = new Date();
-  const thresholdDate = new Date(now);
-  thresholdDate.setMonth(thresholdDate.getMonth() - mesi);
-
-  const thirtyDaysAgo = new Date(now);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  const [
-    totalCount,
-    byStato,
-    urgentiCount,
-    noVisitaCount,
-    visitaAnzianaCount,
-    urgentiClients,
-    daVisitareClients,
-    topBrands,
-    recentiCount,
-  ] = await Promise.all([
+  const [oggi, domani, clientCount, gpsCount, plantCount, openInterventi] = await Promise.all([
+    prisma.appointment.findMany({
+      where: { ...org, date: todayDate, stato: { not: "ANNULLATO" }, ...own },
+      include,
+      orderBy: { startMin: "asc" },
+      take: 80,
+    }),
+    prisma.appointment.findMany({
+      where: { ...org, date: tomorrowDate, stato: { not: "ANNULLATO" }, ...own },
+      include,
+      orderBy: { startMin: "asc" },
+      take: 80,
+    }),
     prisma.client.count({ where: org }),
-    prisma.client.groupBy({ by: ["stato"], where: org, _count: { _all: true } }),
-    prisma.client.count({ where: { ...org, urgente: true } }),
-    prisma.client.count({ where: { ...org, ultimaVisita: null } }),
-    prisma.client.count({
-      where: { ...org, ultimaVisita: { lt: thresholdDate } },
-    }),
-    prisma.client.findMany({
-      where: { ...org, urgente: true },
-      select: {
-        id: true, nome: true, cognome: true,
-        telefono: true, citta: true, indirizzo: true,
-        ultimaVisita: true, stato: true,
-      },
-      orderBy: [{ ultimaVisita: { sort: "asc", nulls: "first" } }],
-      take: 30,
-    }),
-    prisma.client.findMany({
-      where: {
-        ...org,
-        stato: "ATTIVO",
-        OR: [
-          { ultimaVisita: null },
-          { ultimaVisita: { lt: thresholdDate } },
-        ],
-      },
-      select: {
-        id: true, nome: true, cognome: true,
-        telefono: true, citta: true, ultimaVisita: true,
-      },
-      orderBy: { ultimaVisita: { sort: "asc", nulls: "first" } },
-      take: 50,
-    }),
-    prisma.client.groupBy({
-      by: ["marcaStufa"],
-      where: { ...org, marcaStufa: { not: null } },
-      _count: { _all: true },
-      orderBy: { _count: { marcaStufa: "desc" } },
-      take: 12,
-    }),
-    prisma.client.count({
-      where: { ...org, createdAt: { gte: thirtyDaysAgo } },
+    prisma.client.count({ where: { ...org, lat: { not: null }, lng: { not: null } } }),
+    prisma.plant.count({ where: org }),
+    prisma.intervento.count({
+      where: { ...org, stato: { notIn: ["COMPLETATO", "ANNULLATO"] } },
     }),
   ]);
 
-  const statoMap = Object.fromEntries(
-    byStato.map((s) => [s.stato, s._count._all])
-  );
-
   return NextResponse.json({
-    totalCount,
-    attivi: statoMap["ATTIVO"] ?? 0,
-    inattivi: statoMap["INATTIVO"] ?? 0,
-    prospect: statoMap["PROSPECT"] ?? 0,
-    urgentiCount,
-    noVisitaCount,
-    visitaAnzianaCount,
-    recentiCount,
-    mesi,
-    urgentiClients,
-    daVisitareClients,
-    topBrands: topBrands
-      .filter((b) => b.marcaStufa)
-      .map((b) => ({ brand: b.marcaStufa as string, count: b._count._all })),
+    today,
+    tomorrow,
+    oggi: oggi.map(mapApt),
+    domani: domani.map(mapApt),
+    stats: {
+      clients: clientCount,
+      withGps: gpsCount,
+      plants: plantCount,
+      openInterventi,
+    },
   });
 }

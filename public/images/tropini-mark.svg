@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Tropini Service">
+  <rect width="64" height="64" rx="16" fill="#0f766e"/>
+  <path fill="#fff" d="M32 12c6.5 8.2 9.8 13.6 9.8 20.2 0 6.4-4.2 11.8-9.8 11.8S22.2 38.6 22.2 32.2C22.2 25.6 25.5 20.2 32 12z"/>
+  <path fill="#99f6e4" d="M32 22.5c3.2 4.2 4.7 7 4.7 10.2 0 3.2-2 5.8-4.7 5.8s-4.7-2.6-4.7-5.8c0-3.2 1.5-6 4.7-10.2z"/>
+  <rect x="18" y="46" width="28" height="5" rx="2.5" fill="#ccfbf1"/>
+</svg>

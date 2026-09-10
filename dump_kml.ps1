@@ -1,5 +1,5 @@
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$kmzPath = "C:\Users\U1795\Desktop\bitora_clienti\planner_tropini\public\location\11_04_2026.kmz"
+$kmzPath = "C:\Users\U1795\Desktop\bitora_clienti\planner_Bitora\public\location\11_04_2026.kmz"
 $zip = [System.IO.Compression.ZipFile]::OpenRead($kmzPath)
 foreach ($entry in $zip.Entries) {
     if ($entry.Name -like "*.kml") {

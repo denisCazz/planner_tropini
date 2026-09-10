@@ -13,61 +13,269 @@ enum StatoCliente {
   PROSPECT
 }
 
+/// ADMIN accesso completo; USER = operatore; TECNICO vede solo i propri interventi.
 enum UserRole {
   ADMIN
   USER
+  TECNICO
+}
+
+enum StatoAppuntamento {
+  PIANIFICATO
+  CONFERMATO
+  COMPLETATO
+  ANNULLATO
+}
+
+enum TipoAppuntamento {
+  MANUTENZIONE
+  INSTALLAZIONE
+  SOPRALLUOGO
+  PRONTO_INTERVENTO
+}
+
+enum CategoriaSpesa {
+  CARBURANTE
+  RICAMBI
+  ATTREZZATURA
+  PEDAGGI
+  ALLOGGIO
+  MARKETING
+  VARIE
+}
+
+enum StatoIntervento {
+  DA_PIANIFICARE
+  DA_CONTATTARE
+  CONTATTATO
+  DISPONIBILITA_RICEVUTA
+  APPUNTAMENTO_PROPOSTO
+  CONFERMATO
+  PIANIFICATO
+  IN_CORSO
+  COMPLETATO
+  ANNULLATO
+  DA_RICONTATTARE
+}
+
+enum TipoIntervento {
+  MANUTENZIONE
+  ASSISTENZA
+  INSTALLAZIONE
+  SOPRALLUOGO
+  PRONTO_INTERVENTO
+}
+
+enum PrioritaIntervento {
+  BASSA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum TipoDisponibilita {
+  DISPONIBILE_FASCIA
+  DISPONIBILE_GIORNO
+  NON_DISPONIBILE
+  RICHIAMARE
+}
+
+enum PeriodoGiorno {
+  MATTINA
+  POMERIGGIO
+  SERA
+  TUTTO_IL_GIORNO
+}
+
+enum TipoImpianto {
+  STUFA
+  CALDAIA
+  TERMOCAMINO
+  POMPA_CALORE
+  ALTRO
 }
 
 model Organization {
-  id           String         @id @default(cuid())
-  name         String
-  slug         String         @unique
-  isDemo       Boolean        @default(false)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  users        User[]
-  clients      Client[]
-  settings     Settings?
-  routeHistory RouteHistory[]
+  id              String                  @id @default(cuid())
+  name            String
+  slug            String                  @unique
+  isDemo          Boolean                 @default(false)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  users           User[]
+  clients         Client[]
+  clientNotes     ClientNote[]
+  settings        Settings?
+  routeHistory    RouteHistory[]
+  appointments    Appointment[]
+  interventi      Intervento[]
+  spese           Spesa[]
+  plants          Plant[]
+  addresses       Address[]
+  availabilities  CustomerAvailability[]
+  suggestions     PlanningSuggestion[]
+  documents       ClientDocument[]
 }
 
 model User {
-  id             String        @id @default(cuid())
-  username       String        @unique
-  passwordHash   String
-  role           UserRole      @default(USER)
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id              String         @id @default(cuid())
+  username        String         @unique
+  passwordHash    String
+  role            UserRole       @default(USER)
+  organizationId  String?
+  organization    Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nome            String?
+  cognome         String?
+  telefono        String?
+  email           String?
+  attivo          Boolean        @default(true)
+  note            String?
+  assignedClients Client[]
+  clientNotes     ClientNote[]
+  routeHistory    RouteHistory[]
+  appointments    Appointment[]
+  interventi      Intervento[]
+  /// Orario di lavoro: array JSON [{day:1-7, start:"08:00", end:"18:00"}]; default 8-18 se assente
+  workingHours    Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
 
 model Client {
+  id               Int          @id @default(autoincrement())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// Codice anagrafico importabile (EPIM / gestionali esterni)
+  codiceCliente    String?
+  externalId       String?
+  nome             String
+  cognome          String       @default("")
+  ragioneSociale   String?
+  email            String?
+  telefono         String?
+  telefono2        String?
+  codiceFiscale    String?
+  partitaIva       String?
+  indirizzo        String?
+  civico           String?
+  cap              String?
+  citta            String?
+  provincia        String?
+  marcaStufa       String?
+  modelloStufa     String?
+  note             String?
+  stato            StatoCliente @default(PROSPECT)
+  urgente          Boolean      @default(false)
+  /// Icona personalizzata del marker sulla mappa (emoji o chiave preset)
+  icona            String?
+  ultimaVisita     DateTime?
+  lat              Float?
+  lng              Float?
+  geoStatus        String?
+  assignedUserId   String?
+  assignedUser     User?        @relation(fields: [assignedUserId], references: [id], onDelete: SetNull)
+  clientNotes      ClientNote[]
+  appointments     Appointment[]
+  interventi       Intervento[]
+  plants           Plant[]
+  addresses        Address[]
+  availabilities   CustomerAvailability[]
+  documents        ClientDocument[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([organizationId, codiceCliente])
+  @@index([organizationId])
+  @@index([assignedUserId])
+  @@index([organizationId, citta])
+  @@index([organizationId, externalId])
+}
+
+model ClientDocument {
   id             Int          @id @default(autoincrement())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  nome           String
-  cognome        String       @default("")
-  email          String?
-  telefono       String?
-  telefono2      String?
-  indirizzo      String?
+  clientId       Int
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title          String
+  filename       String
+  mimeType       String
+  size           Int
+  storageKey     String
+  createdAt      DateTime     @default(now())
+
+  @@index([clientId])
+  @@index([organizationId])
+}
+
+model Address {
+  id             Int          @id @default(autoincrement())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       Int
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  label          String?
+  indirizzo      String
+  civico         String?
   cap            String?
   citta          String?
   provincia      String?
-  marcaStufa     String?
-  modelloStufa   String?
-  note           String?
-  stato          StatoCliente @default(PROSPECT)
-  urgente        Boolean      @default(false)
-  /// Icona personalizzata del marker sulla mappa (emoji o chiave preset)
-  icona          String?
-  ultimaVisita   DateTime?
   lat            Float?
   lng            Float?
+  isPrimary      Boolean      @default(false)
+  note           String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  @@index([clientId])
+  @@index([organizationId])
+}
+
+model Plant {
+  id                   Int           @id @default(autoincrement())
+  organizationId       String
+  organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId             Int
+  client               Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  externalId           String?
+  marca                String?
+  modello              String?
+  matricola            String?
+  tipologia            TipoImpianto  @default(STUFA)
+  annoInstallazione    Int?
+  dataUltimoIntervento DateTime?     @db.Date
+  note                 String?
+  interventi           Intervento[]
+  notes                ClientNote[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([clientId])
+  @@index([organizationId])
+  @@index([organizationId, matricola])
+}
+
+model ClientNote {
+  id             Int          @id @default(autoincrement())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       Int?
+  client         Client?      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  plantId        Int?
+  plant          Plant?       @relation(fields: [plantId], references: [id], onDelete: Cascade)
+  interventoId   Int?
+  intervento     Intervento?  @relation(fields: [interventoId], references: [id], onDelete: Cascade)
+  authorId       String?
+  author         User?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  /// Nome autore congelato (resta leggibile se l'utente viene rimosso)
+  authorName     String
+  body           String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([clientId])
+  @@index([plantId])
+  @@index([interventoId])
   @@index([organizationId])
 }
 
@@ -82,10 +290,127 @@ model Settings {
   nearestNeighbours Int          @default(4)
 }
 
+model Appointment {
+  id             Int                 @id @default(autoincrement())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       Int
+  client         Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  interventoId   Int?                @unique
+  intervento     Intervento?         @relation("AppointmentIntervento", fields: [interventoId], references: [id], onDelete: SetNull)
+  technicianId   String?
+  technician     User?               @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  /// Data dell'appuntamento (solo giorno, mezzanotte locale)
+  date           DateTime            @db.Date
+  /// Minuto di inizio nel giorno (0-1439, es. 510 = 08:30)
+  startMin       Int
+  durationMin    Int                 @default(60)
+  stato          StatoAppuntamento   @default(PIANIFICATO)
+  tipo           TipoAppuntamento    @default(MANUTENZIONE)
+  note           String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([organizationId, date])
+  @@index([organizationId, technicianId])
+  @@index([clientId])
+}
+
+model Intervento {
+  id             Int               @id @default(autoincrement())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       Int
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  plantId        Int?
+  plant          Plant?            @relation(fields: [plantId], references: [id], onDelete: SetNull)
+  technicianId   String?
+  technician     User?             @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  appointment    Appointment?      @relation("AppointmentIntervento")
+  externalId     String?
+  tipo           TipoIntervento    @default(MANUTENZIONE)
+  priorita       PrioritaIntervento @default(MEDIA)
+  durataStimata  Int               @default(60)
+  stato          StatoIntervento   @default(DA_PIANIFICARE)
+  /// Data richiesta / apertura pratica
+  dataRichiesta  DateTime          @default(now())
+  /// Data esecuzione (quando completato o pianificato in giornata)
+  data           DateTime?         @db.Date
+  ricavo         Decimal           @default(0) @db.Decimal(10, 2)
+  descrizione    String?
+  note           String?
+  notes          ClientNote[]
+  availabilities CustomerAvailability[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([organizationId, data])
+  @@index([organizationId, stato])
+  @@index([clientId])
+  @@index([plantId])
+  @@index([technicianId])
+}
+
+model CustomerAvailability {
+  id             Int               @id @default(autoincrement())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       Int
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  interventoId   Int?
+  intervento     Intervento?       @relation(fields: [interventoId], references: [id], onDelete: SetNull)
+  tipo           TipoDisponibilita
+  /// Giorno specifico (fascia, non disponibile, richiamare)
+  date           DateTime?         @db.Date
+  startMin       Int?
+  endMin         Int?
+  /// 1 = lunedì … 7 = domenica (ricorrenza settimanale)
+  weekday        Int?
+  periodo        PeriodoGiorno?
+  note           String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([clientId])
+  @@index([interventoId])
+  @@index([organizationId, date])
+}
+
+model PlanningSuggestion {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  technicianId   String
+  date           DateTime     @db.Date
+  /// Payload estendibile: { stops, reasons, constraints }
+  payload        Json
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, technicianId, date])
+}
+
+model Spesa {
+  id             Int           @id @default(autoincrement())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  data           DateTime      @db.Date
+  categoria      CategoriaSpesa @default(VARIE)
+  importo        Decimal       @default(0) @db.Decimal(10, 2)
+  descrizione    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId, data])
+}
+
 model RouteHistory {
   id             Int          @id @default(autoincrement())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// Tecnico proprietario della tratta
+  userId         String?
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   createdAt      DateTime     @default(now())
   /// Ordine di visita (id clienti)
   clientIds      Int[]
@@ -96,4 +421,5 @@ model RouteHistory {
   stopCount      Int
 
   @@index([organizationId])
+  @@index([userId])
 }

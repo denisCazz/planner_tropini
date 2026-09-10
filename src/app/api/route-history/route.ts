@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireSession, orgScope } from "@/lib/tenant";
+import { requireSession, orgScope, resolveAssignedUser, INVALID_ASSIGNEE } from "@/lib/tenant";
 
 function buildLabel(names: string[], stopCount: number): string {
   if (names.length === 0) return `${stopCount} tappe`;
@@ -9,13 +9,19 @@ function buildLabel(names: string[], stopCount: number): string {
   return `${shown}${extra}`;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const { session, error } = await requireSession();
   if (error) return error;
 
+  const userId = new URL(req.url).searchParams.get("userId"); // userId | "none" | null
+
   try {
     const rows = await prisma.routeHistory.findMany({
-      where: orgScope(session!.organizationId),
+      where: {
+        ...orgScope(session!.organizationId),
+        ...(userId ? { userId: userId === "none" ? null : userId } : {}),
+      },
+      include: { user: { select: { username: true } } },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
@@ -28,6 +34,8 @@ export async function GET() {
         totalDistance: r.totalDistance,
         totalDuration: r.totalDuration,
         stopCount: r.stopCount,
+        userId: r.userId,
+        ownerName: r.user?.username ?? null,
       }))
     );
   } catch {
@@ -41,15 +49,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { clientIds, totalDistance, totalDuration } = body as {
+    const { clientIds, totalDistance, totalDuration, userId } = body as {
       clientIds: number[];
       totalDistance: number;
       totalDuration: number;
+      userId?: unknown;
     };
 
     if (!clientIds?.length || clientIds.length < 2) {
       return NextResponse.json({ error: "Percorso non valido" }, { status: 400 });
     }
+
+    // Tecnico proprietario: quello indicato (es. filtro attivo) o l'utente corrente.
+    const resolved = await resolveAssignedUser(userId, session!.organizationId);
+    const ownerId = resolved === INVALID_ASSIGNEE ? session!.userId : resolved ?? session!.userId;
 
     const clients = await prisma.client.findMany({
       where: { id: { in: clientIds }, ...orgScope(session!.organizationId) },
@@ -66,12 +79,14 @@ export async function POST(req: NextRequest) {
     const entry = await prisma.routeHistory.create({
       data: {
         organizationId: session!.organizationId,
+        userId: ownerId,
         clientIds,
         label: buildLabel(names, clientIds.length),
         totalDistance,
         totalDuration,
         stopCount: clientIds.length,
       },
+      include: { user: { select: { username: true } } },
     });
 
     const all = await prisma.routeHistory.findMany({
@@ -92,6 +107,8 @@ export async function POST(req: NextRequest) {
       totalDistance: entry.totalDistance,
       totalDuration: entry.totalDuration,
       stopCount: entry.stopCount,
+      userId: entry.userId,
+      ownerName: entry.user?.username ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Errore salvataggio";

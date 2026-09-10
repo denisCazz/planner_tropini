@@ -1,7 +1,7 @@
 "use client";
 
-import { History, X, Trash2, RotateCcw, Clock, Ruler } from "lucide-react";
-import type { RouteHistoryEntry } from "@/types/client";
+import { History, X, Trash2, RotateCcw, Clock, Ruler, User } from "lucide-react";
+import type { OrgUser, RouteHistoryEntry } from "@/types/client";
 
 function formatWhen(iso: string): string {
   const d = new Date(iso);
@@ -24,6 +24,9 @@ function formatWhen(iso: string): string {
 interface RouteHistoryPanelProps {
   entries: RouteHistoryEntry[];
   loading: boolean;
+  orgUsers: OrgUser[];
+  userFilter: string;
+  onUserFilterChange: (v: string) => void;
   onClose: () => void;
   onRestore: (entry: RouteHistoryEntry) => void;
   onDelete: (id: number) => void;
@@ -32,10 +35,15 @@ interface RouteHistoryPanelProps {
 export default function RouteHistoryPanel({
   entries,
   loading,
+  orgUsers,
+  userFilter,
+  onUserFilterChange,
   onClose,
   onRestore,
   onDelete,
 }: RouteHistoryPanelProps) {
+  // Gestione tratte per tecnico: filtro visibile solo con più di 2 tecnici.
+  const showTecnicoFilter = orgUsers.length > 2;
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/40 shrink-0">
@@ -52,6 +60,26 @@ export default function RouteHistoryPanel({
           <X size={18} />
         </button>
       </div>
+
+      {showTecnicoFilter && (
+        <div className="px-4 py-2 border-b border-white/40 shrink-0">
+          <select
+            value={userFilter}
+            onChange={(e) => onUserFilterChange(e.target.value)}
+            className="w-full text-[11px] rounded-md border border-white/50 bg-white/70 px-2 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            title="Filtra tratte per tecnico"
+          >
+            <option value="">Tutti i tecnici</option>
+            {orgUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.username}
+                {u.role === "ADMIN" ? " (admin)" : ""}
+              </option>
+            ))}
+            <option value="none">Senza tecnico</option>
+          </select>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto panel-scroll">
         {loading ? (
@@ -71,7 +99,15 @@ export default function RouteHistoryPanel({
                     className="flex-1 min-w-0 text-left"
                   >
                     <p className="text-sm font-medium text-slate-900 truncate">{e.label}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{formatWhen(e.createdAt)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                      <span>{formatWhen(e.createdAt)}</span>
+                      {e.ownerName && (
+                        <span className="inline-flex items-center gap-0.5 text-indigo-600">
+                          <User size={10} />
+                          {e.ownerName}
+                        </span>
+                      )}
+                    </p>
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400">
                       <span className="flex items-center gap-1">
                         <Ruler size={11} />

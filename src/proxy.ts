@@ -22,14 +22,14 @@ async function isValidSession(token: string): Promise<boolean> {
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   const authenticated = token ? await isValidSession(token) : false;
 
   if (pathname === "/login") {
     if (authenticated) {
-      return NextResponse.redirect(new URL("/mappa", request.url));
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
     return NextResponse.next();
   }

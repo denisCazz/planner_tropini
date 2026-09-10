@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseKmlBuffer } from "@/lib/kml";
-import { requireSession, orgScope } from "@/lib/tenant";
+import { requireOperator, orgScope } from "@/lib/tenant";
 import type { StatoCliente } from "@/types/client";
 
 // Allow up to 5 minutes for large imports
@@ -19,7 +19,7 @@ async function runInBatches<T>(
 }
 
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireSession();
+  const { session, error } = await requireOperator();
   if (error) return error;
 
   const formData = await req.formData();
@@ -59,11 +59,11 @@ export async function POST(req: NextRequest) {
     select: { id: true, nome: true, lat: true, lng: true, cognome: true, telefono: true, telefono2: true, indirizzo: true, cap: true, citta: true, provincia: true, marcaStufa: true, modelloStufa: true, note: true, ultimaVisita: true },
   });
 
-  // Build lookup: "nome|lat4|lng4" → existing record
+  // Build lookup: cognome|nome|lat4|lng4 → existing record
   const lookup = new Map<string, typeof existingClients[0]>();
   for (const c of existingClients) {
     if (c.lat !== null && c.lng !== null) {
-      const key = `${c.nome}|${Math.round(c.lat * 10000)}|${Math.round(c.lng * 10000)}`;
+      const key = `${c.cognome}|${c.nome}|${Math.round(c.lat * 10000)}|${Math.round(c.lng * 10000)}`;
       lookup.set(key, c);
     }
   }
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       toCreate.push(item);
       continue;
     }
-    const key = `${item.nome}|${Math.round(item.lat * 10000)}|${Math.round(item.lng * 10000)}`;
+    const key = `${item.cognome}|${item.nome}|${Math.round(item.lat * 10000)}|${Math.round(item.lng * 10000)}`;
     const existing = lookup.get(key);
     if (existing) {
       toUpdate.push({ id: existing.id, item });

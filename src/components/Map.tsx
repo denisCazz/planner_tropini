@@ -6,7 +6,13 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import type { Client, Settings, RouteResult, ZoneBounds } from "@/types/client";
+import type {
+  Client,
+  Settings,
+  RouteResult,
+  ZoneBounds,
+  Appointment,
+} from "@/types/client";
 import { MAP_ICON_PRESETS } from "@/lib/mapIcons";
 
 function escapeHtml(s: string): string {
@@ -66,6 +72,50 @@ function markerIcon(
   return makePin(client.urgente ? "!" : "", "", color);
 }
 
+const APPOINTMENT_COLORS: Record<string, string> = {
+  PIANIFICATO: "#0284c7",
+  CONFERMATO: "#4f46e5",
+  COMPLETATO: "#059669",
+  ANNULLATO: "#94a3b8",
+};
+
+function minutesToHHMM(min: number): string {
+  const m = ((min % 1440) + 1440) % 1440;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
+function appointmentIcon(apt: Appointment): L.DivIcon {
+  const color = APPOINTMENT_COLORS[apt.stato] ?? "#0284c7";
+  const html = `<div class="cm-appt" style="--appt-color:${color}">
+    <div class="cm-appt__badge">${minutesToHHMM(apt.startMin)}</div>
+    <div class="cm-appt__tail"></div>
+  </div>`;
+  return L.divIcon({
+    html,
+    className: "",
+    iconSize: [52, 38],
+    iconAnchor: [26, 38],
+    popupAnchor: [0, -34],
+  });
+}
+
+function buildAppointmentPopupHtml(apt: Appointment): string {
+  const name = escapeHtml(
+    [apt.client.cognome, apt.client.nome].filter(Boolean).join(" ") || "Cliente"
+  );
+  return `<div style="min-width:190px">
+    <div style="font-weight:700;color:#0f172a;font-size:14px">${name}</div>
+    <div style="font-size:11px;color:#64748b;margin-top:2px">${minutesToHHMM(apt.startMin)} · ${minutesToHHMM(apt.startMin + apt.durationMin)}${apt.technicianName ? " · " + escapeHtml(apt.technicianName) : ""}</div>
+    ${apt.client.indirizzo ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escapeHtml(apt.client.indirizzo)}</div>` : ""}
+    ${apt.client.telefono ? `<div style="font-size:12px;margin-top:4px"><a href="${telHref(apt.client.telefono)}" style="color:#4f46e5;text-decoration:none">📞 ${escapeHtml(apt.client.telefono)}</a></div>` : ""}
+    <div style="display:flex;gap:6px;margin-top:10px">
+      <button onclick="window.__openAppointment(${apt.id})" style="flex:1;padding:7px 10px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:#4f46e5;color:#fff">Modifica</button>
+    </div>
+  </div>`;
+}
+
 const HOME_ICON = L.divIcon({
   html: `<div class="cm-pin" style="--pin-color:#4f46e5">
     <div class="cm-pin__body"><span class="cm-pin__glyph" style="font-size:15px">🏠</span></div>
@@ -101,6 +151,9 @@ function buildPopupHtml(client: Client, isSelected: boolean): string {
     ${iconPickerHtml(client)}
     <div style="display:flex;gap:6px;margin-top:10px">${inRoute}</div>
     <div style="display:flex;gap:6px;margin-top:6px">
+      <button onclick="window.__openClientDetail(${client.id})" style="flex:1;padding:6px 10px;border-radius:9px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:rgba(99,102,241,0.15);color:#4338ca">Note e dettagli</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px">
       <a href="/clienti/${client.id}" style="flex:1;text-align:center;padding:6px 10px;border-radius:9px;font-size:11px;color:#334155;text-decoration:none;background:rgba(148,163,184,0.18)">Apri scheda →</a>
       <button onclick="window.__removeFromMap(${client.id})" title="Rimuovi dalla mappa" style="padding:6px 10px;border-radius:9px;font-size:11px;cursor:pointer;border:none;background:rgba(239,68,68,0.12);color:#b91c1c">Rimuovi</button>
     </div>
@@ -120,12 +173,20 @@ interface MapProps {
   onSetIcon?: (id: number, icona: string | null) => void;
   /** Rimuove un cliente dalla mappa (dai "spuntati") */
   onRemoveFromMap?: (id: number) => void;
+  /** Apre la scheda cliente con note */
+  onOpenDetail?: (id: number) => void;
   /** Modalità "disegna zona": disabilita il drag e abilita il rettangolo di selezione */
   zoneMode?: boolean;
   /** Rettangolo zona attivo da mostrare in modo persistente */
   zoneBounds?: ZoneBounds | null;
   /** Callback al termine del disegno del rettangolo */
   onZoneDrawn?: (bounds: ZoneBounds) => void;
+  /** Appuntamenti da mostrare sulla mappa (vista agenda) */
+  appointments?: Appointment[];
+  /** Apre il form di modifica di un appuntamento (dal popup) */
+  onOpenAppointment?: (id: number) => void;
+  /** Zoom sul marker dell'appuntamento con questo id (cambia → pulse) */
+  focusAppointmentId?: number | null;
 }
 
 export default function ClientMap({
@@ -138,9 +199,13 @@ export default function ClientMap({
   planMode = false,
   onSetIcon,
   onRemoveFromMap,
+  onOpenDetail,
   zoneMode = false,
   zoneBounds = null,
   onZoneDrawn,
+  appointments = [],
+  onOpenAppointment,
+  focusAppointmentId = null,
 }: MapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -153,6 +218,8 @@ export default function ClientMap({
   const pulseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeStopsKeyRef = useRef<string>("");
   const zoneRectRef = useRef<L.Rectangle | null>(null);
+  const appointmentMarkersRef = useRef<globalThis.Map<number, L.Marker>>(new globalThis.Map());
+  const appointmentsByIdRef = useRef<globalThis.Map<number, Appointment>>(new globalThis.Map());
   const onZoneDrawnRef = useRef(onZoneDrawn);
   const planModeRef = useRef(planMode);
   const onToggleSelectRef = useRef(onToggleSelect);
@@ -334,6 +401,10 @@ export default function ClientMap({
     (window as unknown as Record<string, unknown>).__removeFromMap = (id: number) =>
       onRemoveFromMap?.(id);
   }, [onRemoveFromMap]);
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__openClientDetail = (id: number) =>
+      onOpenDetail?.(id);
+  }, [onOpenDetail]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -498,6 +569,81 @@ export default function ClientMap({
     zoneRectRef.current = rect;
     map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
   }, [zoneBounds]);
+
+  // Marker appuntamenti (vista agenda)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const currentIds = new Set(appointments.map((a) => a.id));
+    appointmentsByIdRef.current = new globalThis.Map(appointments.map((a) => [a.id, a]));
+
+    // Rimuovi quelli non più presenti
+    appointmentMarkersRef.current.forEach((marker, id) => {
+      if (!currentIds.has(id)) {
+        marker.remove();
+        appointmentMarkersRef.current.delete(id);
+      }
+    });
+
+    // Aggiungi/aggiorna
+    appointments.forEach((apt) => {
+      if (apt.client.lat == null || apt.client.lng == null) return;
+      const existing = appointmentMarkersRef.current.get(apt.id);
+      if (existing) {
+        existing.setIcon(appointmentIcon(apt));
+        existing.setPopupContent(buildAppointmentPopupHtml(apt));
+        existing.setLatLng([apt.client.lat, apt.client.lng]);
+        return;
+      }
+      const marker = L.marker([apt.client.lat, apt.client.lng], {
+        icon: appointmentIcon(apt),
+        zIndexOffset: 800,
+      });
+      marker.bindPopup(buildAppointmentPopupHtml(apt));
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        const latest = appointmentsByIdRef.current.get(apt.id) ?? apt;
+        marker.setPopupContent(buildAppointmentPopupHtml(latest));
+        marker.openPopup();
+      });
+      marker.addTo(map);
+      appointmentMarkersRef.current.set(apt.id, marker);
+    });
+
+    // Fit sui marker agenda quando cambiano
+    if (appointments.length > 0) {
+      const pts = appointments
+        .filter((a) => a.client.lat != null && a.client.lng != null)
+        .map((a) => [a.client.lat!, a.client.lng!] as [number, number]);
+      if (pts.length > 0) {
+        map.fitBounds(L.latLngBounds(pts).pad(0.25), { maxZoom: 14 });
+      }
+    }
+  }, [appointments]);
+
+  // Pulizia marker appuntamenti allo smontaggio / cambio lista gestito sopra
+  useEffect(() => {
+    return () => {
+      appointmentMarkersRef.current.forEach((m) => m.remove());
+      appointmentMarkersRef.current.clear();
+    };
+  }, []);
+
+  // Focus su un appuntamento: pulse + popup
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!focusAppointmentId || !map) return;
+    const marker = appointmentMarkersRef.current.get(focusAppointmentId);
+    if (!marker) return;
+    map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14), { animate: true });
+    marker.openPopup();
+  }, [focusAppointmentId]);
+
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__openAppointment = (id: number) =>
+      onOpenAppointment?.(id);
+  }, [onOpenAppointment]);
 
   return <div ref={containerRef} className="w-full h-full" />;
 }

@@ -1,320 +1,149 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Search, Pencil, Trash2, MapPin, Eye, Download } from "lucide-react";
+import { Plus, Search, MapPin, Phone } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Client, StatoCliente } from "@/types/client";
 import Drawer from "@/components/Drawer";
 import ClientForm from "@/components/ClientForm";
-
-const STATO_COLORS: Record<StatoCliente, string> = {
-  ATTIVO: "bg-green-100 text-green-800",
-  INATTIVO: "bg-gray-100 text-gray-700",
-  PROSPECT: "bg-yellow-100 text-yellow-800",
-};
-
-const STATO_LABELS: Record<StatoCliente, string> = {
-  ATTIVO: "Attivo",
-  INATTIVO: "Inattivo",
-  PROSPECT: "Non categorizzato",
-};
+import PageHeader from "@/components/ui/PageHeader";
 
 export default function ClientiPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
   const [statoFilter, setStatoFilter] = useState<StatoCliente | "">("");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editing, setEditing] = useState<Client | undefined>(undefined);
-  const [deleting, setDeleting] = useState<number | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const deleteTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounce search by 350ms
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 350);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setDebounced(search), 300);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
   }, [search]);
 
-  const fetchClients = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
     const params = new URLSearchParams();
-    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (debounced) params.set("search", debounced);
     if (statoFilter) params.set("stato", statoFilter);
-    const res = await fetch(`/api/clients?${params.toString()}`);
-    const data = await res.json();
-    setClients(data);
-    setLoading(false);
-  }, [debouncedSearch, statoFilter]);
+    params.set("limit", "500");
+    try {
+      const res = await fetch(`/api/clients?${params}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Impossibile caricare l'anagrafica");
+      }
+      const data = await res.json();
+      setClients(Array.isArray(data) ? data : []);
+      const headerTotal = Number(res.headers.get("X-Total-Count"));
+      setTotal(Number.isFinite(headerTotal) && headerTotal > 0 ? headerTotal : Array.isArray(data) ? data.length : 0);
+      setLoadError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Impossibile caricare i clienti";
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [debounced, statoFilter]);
 
   useEffect(() => {
-    fetchClients();
-  }, [fetchClients]);
-
-  function openNew() {
-    setEditing(undefined);
-    setDrawerOpen(true);
-  }
-
-  function openEdit(client: Client) {
-    setEditing(client);
-    setDrawerOpen(true);
-  }
-
-  function handleSaved(_saved: Client) {
-    setDrawerOpen(false);
-    fetchClients();
-  }
-
-  function exportClientsCsv() {
-    const headers = [
-      "id",
-      "cognome",
-      "nome",
-      "email",
-      "telefono",
-      "telefono2",
-      "indirizzo",
-      "cap",
-      "citta",
-      "provincia",
-      "stato",
-      "urgente",
-      "ultimaVisita",
-    ] as const;
-    function cell(v: string | number | boolean | null | undefined): string {
-      const s = v == null ? "" : String(v);
-      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-      return s;
-    }
-    const lines = [
-      headers.join(";"),
-      ...clients.map((c) =>
-        headers
-          .map((h) => {
-            const v = c[h as keyof Client];
-            return cell(v as string | number | boolean | null | undefined);
-          })
-          .join(";")
-      ),
-    ];
-    const bom = "\uFEFF";
-    const blob = new Blob([bom + lines.join("\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `clienti_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    toast.success("CSV scaricato");
-  }
-
-  function scheduleDelete(id: number) {
-    const prev = deleteTimersRef.current.get(id);
-    if (prev) clearTimeout(prev);
-
-    const toastId = toast("Eliminazione programmata", {
-      description: "Il cliente verrà rimosso tra 5 secondi.",
-      duration: 5000,
-      action: {
-        label: "Annulla",
-        onClick: () => {
-          const t = deleteTimersRef.current.get(id);
-          if (t) clearTimeout(t);
-          deleteTimersRef.current.delete(id);
-          toast.dismiss(toastId);
-        },
-      },
-    });
-
-    const t = setTimeout(() => {
-      deleteTimersRef.current.delete(id);
-      toast.dismiss(toastId);
-      void (async () => {
-        setDeleting(id);
-        try {
-          await fetch(`/api/clients/${id}`, { method: "DELETE" });
-          toast.success("Cliente eliminato");
-          fetchClients();
-        } catch {
-          toast.error("Errore durante l'eliminazione");
-        } finally {
-          setDeleting(null);
-        }
-      })();
-    }, 5000);
-    deleteTimersRef.current.set(id, t);
-  }
+    const id = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(id);
+  }, [load]);
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Clienti</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {clients.length} cliente{clients.length !== 1 ? "i" : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={exportClientsCsv}
-            disabled={loading || clients.length === 0}
-            className="flex items-center gap-2 border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          >
-            <Download size={16} />
-            Esporta CSV
+    <div className="p-5 max-w-6xl mx-auto">
+      <PageHeader
+        title="Clienti"
+        subtitle={
+          total > 0
+            ? `${total.toLocaleString("it-IT")} in anagrafica${clients.length < total ? ` · primi ${clients.length}` : ""}`
+            : "Anagrafica operativa"
+        }
+        action={
+          <button type="button" className="btn btn-primary" onClick={() => setDrawerOpen(true)}>
+            <Plus size={16} /> Nuovo
           </button>
-          <button
-            onClick={openNew}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-          >
-            <Plus size={16} />
-            Nuovo cliente
-          </button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Filtri */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          />
+      <div className="flex flex-wrap gap-2 mb-4">
+        <div className="relative flex-1 min-w-56">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            className="w-full border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            placeholder="Cerca per nome, cognome, email, telefono, indirizzo, città, CAP, marca/modello stufa, note..."
+            className="field field-icon"
+            placeholder="Nome, telefono, città, codice…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex flex-wrap gap-1">
-          <button
-            type="button"
-            onClick={() => setStatoFilter("")}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-              statoFilter === ""
-                ? "bg-indigo-600 text-white border-indigo-600"
-                : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-            }`}
-          >
-            Tutti
-          </button>
-          {(Object.keys(STATO_LABELS) as StatoCliente[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setStatoFilter(s)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-                statoFilter === s
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-              }`}
-            >
-              {STATO_LABELS[s]}
-            </button>
-          ))}
-        </div>
+        <select
+          className="field w-40"
+          value={statoFilter}
+          onChange={(e) => setStatoFilter(e.target.value as StatoCliente | "")}
+        >
+          <option value="">Tutti</option>
+          <option value="ATTIVO">Attivi</option>
+          <option value="INATTIVO">Inattivi</option>
+          <option value="PROSPECT">Prospect</option>
+        </select>
       </div>
 
-      {/* Tabella — solo desktop */}
-      <div className="hidden md:block glass rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-gray-400">Caricamento...</div>
-        ) : clients.length === 0 ? (
-          <div className="p-12 text-center text-gray-400">
-            Nessun cliente trovato
+      <div className="card overflow-hidden">
+        {loadError && clients.length === 0 ? (
+          <div className="p-8 text-sm text-slate-600">
+            <p>{loadError}</p>
+            <button type="button" className="btn btn-ghost mt-3" onClick={() => void load()}>
+              Riprova
+            </button>
           </div>
+        ) : loading && clients.length === 0 ? (
+          <p className="p-8 text-sm text-slate-400">Caricamento…</p>
+        ) : clients.length === 0 ? (
+          <p className="p-8 text-sm text-slate-400">Nessun cliente</p>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-white/40 border-b border-white/40">
+            <thead className="bg-slate-50 text-xs text-slate-500">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
-                  <span className="flex items-center gap-1">
-                    Nome
-                    <span className="text-xs font-normal text-gray-400 tracking-wide">A→Z</span>
-                  </span>
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
-                  Contatti
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
-                  Indirizzo
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
-                  Stato
-                </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
-                  Ultima Visita
-                </th>
-                <th className="px-4 py-3 text-right font-medium text-gray-600">
-                  Azioni
-                </th>
+                <th className="text-left px-4 py-2 font-medium">Cliente</th>
+                <th className="text-left px-4 py-2 font-medium hidden sm:table-cell">Città</th>
+                <th className="text-left px-4 py-2 font-medium hidden md:table-cell">Telefono</th>
+                <th className="text-left px-4 py-2 font-medium hidden lg:table-cell">Impianto</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-slate-100">
               {clients.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    <span className="font-semibold">{c.cognome}</span>
-                    {c.cognome && c.nome ? " " : ""}{c.nome}
+                <tr key={c.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-2.5">
+                    <Link href={`/clienti/${c.id}`} className="font-medium text-slate-900 hover:text-teal-700">
+                      {[c.cognome, c.nome].filter(Boolean).join(" ")}
+                      {c.ragioneSociale ? ` · ${c.ragioneSociale}` : ""}
+                    </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    <div>{c.email}</div>
-                    <div className="text-gray-400">{c.telefono}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    <div className="flex items-center gap-1">
-                      {c.lat && c.lng && (
-                        <MapPin size={12} className="text-green-500 shrink-0" />
-                      )}
-                      <span className="truncate max-w-[200px]">
-                        {c.indirizzo ?? "—"}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATO_COLORS[c.stato]}`}
-                    >
-                      {STATO_LABELS[c.stato]}
+                  <td className="px-4 py-2.5 text-slate-500 hidden sm:table-cell">
+                    <span className="inline-flex items-center gap-1">
+                      {c.lat != null ? <MapPin size={12} className="text-teal-600" /> : <MapPin size={12} className="text-slate-300" />}
+                      {c.citta ?? "—"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {c.ultimaVisita
-                      ? new Date(c.ultimaVisita).toLocaleDateString("it-IT")
-                      : "—"}
+                  <td className="px-4 py-2.5 hidden md:table-cell">
+                    {c.telefono ? (
+                      <a href={`tel:${c.telefono}`} className="inline-flex items-center gap-1 text-teal-700">
+                        <Phone size={12} /> {c.telefono}
+                      </a>
+                    ) : (
+                      "—"
+                    )}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Link
-                        href={`/clienti/${c.id}`}
-                        className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-                        title="Vedi scheda"
-                      >
-                        <Eye size={15} />
-                      </Link>
-                      <button
-                        onClick={() => openEdit(c)}
-                        className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-                        title="Modifica"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        onClick={() => scheduleDelete(c.id)}
-                        disabled={deleting === c.id}
-                        className="p-1.5 rounded-md hover:bg-red-50 text-gray-500 hover:text-red-500 transition-colors disabled:opacity-50"
-                        title="Elimina"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
+                  <td className="px-4 py-2.5 text-slate-500 hidden lg:table-cell">
+                    {[c.marcaStufa, c.modelloStufa].filter(Boolean).join(" ") || "—"}
                   </td>
                 </tr>
               ))}
@@ -323,79 +152,12 @@ export default function ClientiPage() {
         )}
       </div>
 
-      {/* Card list — solo mobile */}
-      <div className="md:hidden space-y-3">
-        {loading ? (
-          <div className="py-12 text-center text-gray-400 text-sm">Caricamento...</div>
-        ) : clients.length === 0 ? (
-          <div className="py-12 text-center text-gray-400 text-sm">Nessun cliente trovato</div>
-        ) : (
-          clients.map((c) => (
-            <div key={c.id} className="glass rounded-2xl p-4 space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-semibold text-gray-900">
-                    <span>{c.cognome}</span>
-                    {c.cognome && c.nome ? " " : ""}{c.nome}
-                  </div>
-                  {c.indirizzo && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {c.lat && c.lng ? (
-                        <MapPin size={11} className="text-green-500 shrink-0" />
-                      ) : (
-                        <MapPin size={11} className="text-gray-300 shrink-0" />
-                      )}
-                      <span className="text-xs text-gray-500 truncate">{c.indirizzo}</span>
-                    </div>
-                  )}
-                </div>
-                <span className={`shrink-0 inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATO_COLORS[c.stato]}`}>
-                  {STATO_LABELS[c.stato]}
-                </span>
-              </div>
-              <div className="text-sm text-gray-600 space-y-0.5">
-                {c.email && <div>{c.email}</div>}
-                {c.telefono && <div className="text-gray-400">{c.telefono}</div>}
-                {c.ultimaVisita && (
-                  <div className="text-xs text-gray-400">
-                    Ultima visita: {new Date(c.ultimaVisita).toLocaleDateString("it-IT")}
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-                <Link
-                  href={`/clienti/${c.id}`}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs font-medium transition-colors"
-                >
-                  <Eye size={13} /> Vedi
-                </Link>
-                <button
-                  onClick={() => openEdit(c)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-gray-50 hover:bg-gray-100 text-gray-600 text-xs font-medium transition-colors"
-                >
-                  <Pencil size={13} /> Modifica
-                </button>
-                <button
-                  onClick={() => scheduleDelete(c.id)}
-                  disabled={deleting === c.id}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-gray-50 hover:bg-red-50 text-gray-600 hover:text-red-500 text-xs font-medium transition-colors disabled:opacity-50"
-                >
-                  <Trash2 size={13} /> Elimina
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <Drawer
-        title={editing ? "Modifica cliente" : "Nuovo cliente"}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      >
+      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} title="Nuovo cliente">
         <ClientForm
-          initial={editing}
-          onSaved={handleSaved}
+          onSaved={() => {
+            setDrawerOpen(false);
+            void load();
+          }}
           onClose={() => setDrawerOpen(false)}
         />
       </Drawer>
