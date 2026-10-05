@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { geocodeZone, haversineKm } from "./geo";
 import { scoreClient } from "./priority";
-import { addDaysToDateKey, formatItalianDateLong, minutesToHHMM, parseDateKey, toLocalDateKey } from "./dates";
+import { addDaysToDateKey, formatItalianDateLong, hhmmToMinutes, minutesToHHMM, parseDateKey, toLocalDateKey } from "./dates";
 import { optimizeRoute, getRouteGeometry } from "./ors";
 import { bestMobile } from "./phone";
 import { sendSms } from "./twilio";
@@ -253,60 +253,171 @@ function hhmmToSec(hhmm: string) {
   return h * 3600 + m * 60;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+function orderNearest<T extends { client: { lat: number | null; lng: number | null } }>(
+  start: { lat: number; lng: number },
+  stops: T[]
+) {
+  const left = [...stops];
+  const ordered: T[] = [];
+  let lat = start.lat;
+  let lng = start.lng;
+  while (left.length) {
+    let best = 0;
+    let bestD = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < left.length; i++) {
+      const c = left[i].client;
+      const d = c.lat != null && c.lng != null ? haversineKm(lat, lng, c.lat, c.lng) : 10_000 + i;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    const next = left.splice(best, 1)[0];
+    ordered.push(next);
+    if (next.client.lat != null && next.client.lng != null) {
+      lat = next.client.lat;
+      lng = next.client.lng;
+    }
+  }
+  return ordered;
+}
+
+async function publishAppointments(planId: number, organizationId: string) {
+  const plan = await prisma.plan.findFirst({
+    where: { id: planId, organizationId },
+    include: { stops: true },
+  });
+  if (!plan) return;
+  const active = plan.stops
+    .filter((s) => s.status !== "NON_DISPONIBILE" && s.ordine != null)
+    .sort((a, b) => (a.ordine ?? 0) - (b.ordine ?? 0));
+  await prisma.appointment.deleteMany({
+    where: { organizationId, note: { startsWith: `giro:${planId}:` } },
+  });
+  if (active.length === 0) return;
+  await prisma.appointment.createMany({
+    data: active.map((s, i) => ({
+      organizationId,
+      clientId: s.clientId,
+      technicianId: plan.technicianId,
+      date: plan.data,
+      startMin: hhmmToMinutes(s.orario ?? "") ?? 8 * 60 + 30 + i * SERVICE_MIN,
+      durationMin: SERVICE_MIN,
+      stato: s.status === "CONFERMATO" ? "CONFERMATO" : "PIANIFICATO",
+      tipo: "MANUTENZIONE" as const,
+      note: `giro:${planId}:${s.id}`,
+    })),
+  });
+}
+
 export async function optimizePlan(planId: number, organizationId: string) {
   const plan = await prisma.plan.findFirst({ where: { id: planId, organizationId }, include: PLAN_INCLUDE });
   if (!plan) throw new Error("Piano non trovato");
   const settings = await orgSettings(organizationId);
   const start = { lat: settings.startLat, lng: settings.startLng };
-  const active = plan.stops.filter((s) => s.status !== "NON_DISPONIBILE" && s.client.lat != null && s.client.lng != null);
-  if (active.length === 0) throw new Error("Nessuna tappa valida da ottimizzare");
+  const active = plan.stops.filter((s) => s.status !== "NON_DISPONIBILE");
+  if (active.length === 0) throw new Error("Nessuna tappa da mettere in giornata. Tieni almeno un cliente.");
 
-  const opt = await optimizeRoute(
-    start.lng,
-    start.lat,
-    active.map((s) => ({ id: s.id, location: [s.client.lng!, s.client.lat!] as [number, number] })),
-    { serviceSec: SERVICE_MIN * 60, dayStartSec: hhmmToSec(DAY_START) }
-  );
-  const route = opt.routes[0];
-  if (!route) throw new Error("Nessun percorso trovato");
-  if (opt.unassigned?.length) {
-    throw new Error(`${opt.unassigned.length} tappe non entrano in giornata. Togline qualcuna e riprova.`);
+  const withCoords = active.filter((s) => s.client.lat != null && s.client.lng != null);
+  let warning: string | null = null;
+  let ordered = orderNearest(start, active);
+  let geometry: [number, number][] | null = ordered
+    .filter((s) => s.client.lat != null && s.client.lng != null)
+    .map((s) => [s.client.lat!, s.client.lng!]);
+  let totalDistance: number | null = null;
+  let totalDuration: number | null = ordered.length * SERVICE_MIN;
+
+  if (withCoords.length > 0) {
+    try {
+      const opt = await withTimeout(
+        optimizeRoute(
+          start.lng,
+          start.lat,
+          withCoords.map((s) => ({ id: s.id, location: [s.client.lng!, s.client.lat!] as [number, number] })),
+          { serviceSec: SERVICE_MIN * 60, dayStartSec: hhmmToSec(DAY_START) }
+        ),
+        12_000
+      );
+      const route = opt.routes?.[0];
+      const jobSteps = route?.steps.filter((s) => s.type === "job" && s.job !== undefined) ?? [];
+      if (!route || jobSteps.length === 0 || (opt.unassigned?.length ?? 0) > 0) {
+        warning = "Mappa stradale incompleta: ordine per vicinanza e orari dalle 08:30.";
+      } else {
+        const byId = new Map(withCoords.map((s) => [s.id, s]));
+        const road = jobSteps.map((s) => byId.get(s.job!)).filter((s): s is (typeof withCoords)[number] => !!s);
+        const rest = active.filter((s) => !road.some((r) => r.id === s.id));
+        ordered = [...road, ...rest];
+        const arrivalById = new Map(jobSteps.map((s) => [s.job!, s.arrival]));
+        ordered.forEach((s, i) => {
+          const arrival = arrivalById.get(s.id);
+          s.orario = arrival != null ? minutesToHHMM(Math.round(arrival / 60 / 15) * 15) : minutesToHHMM(8 * 60 + 30 + i * SERVICE_MIN);
+        });
+        const coords: [number, number][] = [
+          [start.lng, start.lat],
+          ...road.map((s) => [s.client.lng!, s.client.lat!] as [number, number]),
+          [start.lng, start.lat],
+        ];
+        const dir = await withTimeout(getRouteGeometry(coords), 12_000);
+        const feature = dir.features?.[0];
+        if (feature) {
+          geometry = feature.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+          totalDistance = Math.round(feature.properties.summary.distance / 100) / 10;
+          totalDuration = Math.round(feature.properties.summary.duration / 60);
+        }
+      }
+    } catch {
+      warning = "Mappe non raggiungibili: ordine per vicinanza e orari dalle 08:30. La giornata è comunque in calendario.";
+    }
   }
-  const jobSteps = route.steps.filter((s) => s.type === "job" && s.job !== undefined);
-  const orderedIds = jobSteps.map((s) => s.job!);
-  const arrivalById = new Map(jobSteps.map((s) => [s.job!, s.arrival]));
-  const byId = new Map(active.map((s) => [s.id, s]));
-  const coords: [number, number][] = [
-    [start.lng, start.lat],
-    ...orderedIds.map((id) => [byId.get(id)!.client.lng!, byId.get(id)!.client.lat!] as [number, number]),
-    [start.lng, start.lat],
-  ];
-  const dir = await getRouteGeometry(coords);
-  const feature = dir.features[0];
-  const geometry = feature.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+
+  ordered.forEach((s, i) => {
+    if (!s.orario) s.orario = minutesToHHMM(8 * 60 + 30 + i * SERVICE_MIN);
+  });
 
   await prisma.$transaction([
-    ...orderedIds.map((id, i) =>
+    ...ordered.map((s, i) =>
       prisma.planStop.update({
-        where: { id },
-        data: {
-          ordine: i + 1,
-          ...(byId.get(id)!.orario ? {} : { orario: minutesToHHMM(Math.round((arrivalById.get(id) ?? 0) / 60 / 15) * 15) }),
-        },
+        where: { id: s.id },
+        data: { ordine: i + 1, orario: s.orario },
       })
     ),
-    prisma.planStop.updateMany({ where: { planId, id: { notIn: orderedIds } }, data: { ordine: null } }),
+    prisma.planStop.updateMany({
+      where: { planId, id: { notIn: ordered.map((s) => s.id) } },
+      data: { ordine: null },
+    }),
     prisma.plan.update({
       where: { id: planId },
       data: {
-        geometry,
-        totalDistance: Math.round(feature.properties.summary.distance / 100) / 10,
-        totalDuration: Math.round(feature.properties.summary.duration / 60),
+        geometry: geometry ?? Prisma.DbNull,
+        totalDistance,
+        totalDuration,
         status: "PRONTO",
       },
     }),
   ]);
-  return getPlan(planId, organizationId);
+  await publishAppointments(planId, organizationId);
+  const saved = await getPlan(planId, organizationId);
+  return {
+    plan: saved,
+    warning,
+    calendarDate: plan.data.toISOString().slice(0, 10),
+  };
 }
 
 export async function availabilitySmsText(stopId: number, organizationId: string) {

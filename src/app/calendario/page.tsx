@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -21,6 +21,11 @@ const SLOT = 30;
 export default function CalendarioPage() {
   const [view, setView] = useState<"day" | "week">("week");
   const [cursor, setCursor] = useState(() => toLocalDateKey(new Date()));
+
+  useEffect(() => {
+    const date = new URLSearchParams(window.location.search).get("date");
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) setCursor(date);
+  }, []);
   const [tech, setTech] = useState("");
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const { users } = useOrgUsers();
