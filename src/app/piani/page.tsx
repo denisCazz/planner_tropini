@@ -41,7 +41,7 @@ function PianiInner() {
   }, [batch]);
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto">
+    <div className="p-4 md:p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-slate-900">Giornate</h1>
         <Link href="/assistente" className="text-sm text-teal-700 font-medium">
