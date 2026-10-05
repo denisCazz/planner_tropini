@@ -1,10 +1,11 @@
+﻿import { timingSafeEqual } from "crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/auth-constants";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword } from "@/lib/password";
-import { TROPINI_ORG_SLUG } from "@/lib/tropini";
+import { hashPassword, verifyPassword } from "@/lib/password";
+import { TROPINI_ORG_ID, TROPINI_ORG_NAME, TROPINI_ORG_SLUG } from "@/lib/tropini";
 
 export { SESSION_COOKIE } from "@/lib/auth-constants";
 
@@ -26,18 +27,83 @@ function getSecretKey() {
   return new TextEncoder().encode(secret);
 }
 
+function envAdmin() {
+  const username = process.env.AUTH_USERNAME?.trim() ?? "";
+  const password = process.env.AUTH_PASSWORD ?? "";
+  if (!username || !password) return null;
+  return { username, password };
+}
+
+function sameSecret(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
+function orgAllowed(slug: string, username: string) {
+  if (slug === TROPINI_ORG_SLUG) return true;
+  return envAdmin()?.username === username;
+}
+
+async function loginWithEnvAdmin(username: string, password: string): Promise<SessionPayload | null> {
+  const env = envAdmin();
+  if (!env || username !== env.username || !sameSecret(password, env.password)) return null;
+
+  let org =
+    (await prisma.organization.findUnique({ where: { slug: TROPINI_ORG_SLUG } })) ??
+    (await prisma.organization.findFirst({ where: { isDemo: false }, orderBy: { createdAt: "asc" } }));
+  if (!org) {
+    org = await prisma.organization.create({
+      data: { id: TROPINI_ORG_ID, name: TROPINI_ORG_NAME, slug: TROPINI_ORG_SLUG, isDemo: false },
+    });
+  }
+
+  const existing = await prisma.user.findUnique({ where: { username } });
+  const user = await prisma.user.upsert({
+    where: { username },
+    update: {
+      ...(existing && verifyPassword(password, existing.passwordHash) ? {} : { passwordHash: hashPassword(password) }),
+      role: "ADMIN",
+      attivo: true,
+      organizationId: existing?.organizationId ?? org.id,
+    },
+    create: {
+      username,
+      passwordHash: hashPassword(password),
+      role: "ADMIN",
+      attivo: true,
+      organizationId: org.id,
+    },
+    include: { organization: true },
+  });
+  if (!user.organizationId || !user.organization) return null;
+
+  return {
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    organizationId: user.organizationId,
+    organizationName: user.organization.name,
+  };
+}
+
 export async function authenticateUser(
   username: string,
   password: string
 ): Promise<SessionPayload | null> {
+  const name = username.trim();
+  const fromEnv = await loginWithEnvAdmin(name, password);
+  if (fromEnv) return fromEnv;
+
   const user = await prisma.user.findUnique({
-    where: { username: username.trim() },
+    where: { username: name },
     include: { organization: true },
   });
 
   if (!user?.organizationId || !user.organization) return null;
   if (user.attivo === false) return null;
-  if (user.organization.slug !== TROPINI_ORG_SLUG) return null;
+  if (!orgAllowed(user.organization.slug, user.username)) return null;
   if (!verifyPassword(password, user.passwordHash)) return null;
 
   return {
@@ -95,7 +161,7 @@ export async function getSession(): Promise<SessionPayload | null> {
   });
   if (!user?.organizationId || !user.organization) return null;
   if (user.attivo === false) return null;
-  if (user.organization.slug !== TROPINI_ORG_SLUG) return null;
+  if (!orgAllowed(user.organization.slug, user.username)) return null;
 
   return {
     userId: user.id,
