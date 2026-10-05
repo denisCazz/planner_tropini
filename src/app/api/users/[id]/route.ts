@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin, assertUserInOrg } from "@/lib/tenant";
 import { hashPassword } from "@/lib/password";
+import { geocodeAddress } from "@/lib/geocode";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -58,6 +59,22 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
   if (typeof body.email === "string") data.email = body.email.trim() || null;
   if (typeof body.note === "string") data.note = body.note.trim() || null;
   if (typeof body.attivo === "boolean" && isAdmin) data.attivo = body.attivo;
+  if (isAdmin && typeof body.startLabel === "string") {
+    const label = body.startLabel.trim();
+    if (!label) {
+      data.startLabel = null;
+      data.startLat = null;
+      data.startLng = null;
+    } else {
+      const geo = await geocodeAddress(label);
+      if (!geo) {
+        return NextResponse.json({ error: "Indirizzo di partenza non trovato" }, { status: 400 });
+      }
+      data.startLabel = label;
+      data.startLat = geo.lat;
+      data.startLng = geo.lng;
+    }
+  }
 
   if (isAdmin && typeof body.password === "string" && body.password.length > 0) {
     if (body.password.length < 6) {
@@ -113,6 +130,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       attivo: true,
       note: true,
       workingHours: true,
+      startLabel: true,
+      startLat: true,
+      startLng: true,
       _count: { select: { assignedClients: true } },
     },
   });
@@ -128,6 +148,9 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     attivo: user.attivo,
     note: user.note,
     workingHours: user.workingHours,
+    startLabel: user.startLabel,
+    startLat: user.startLat,
+    startLng: user.startLng,
     assignedClientCount: user._count.assignedClients,
   });
 }

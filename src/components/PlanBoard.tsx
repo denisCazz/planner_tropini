@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -92,6 +92,7 @@ export default function PlanBoard({ initial, flash }: { initial: Plan[]; flash?:
           <h2 className="text-lg font-semibold capitalize text-slate-800 mb-3">{dayLabel(day)}</h2>
           <div className="space-y-4">
             {dayPlans.map((plan) => {
+              const locked = plan.status === "PRONTO" || plan.status === "INVIATO";
               const active = plan.stops.filter((s) => s.status !== "NON_DISPONIBILE");
               const confirmed = active.filter((s) => s.status === "CONFERMATO").length;
               const pending = active.some((s) => s.status === "DA_CHIAMARE" || s.status === "SMS_INVIATO" || s.status === "NESSUNA_RISPOSTA");
@@ -105,7 +106,7 @@ export default function PlanBoard({ initial, flash }: { initial: Plan[]; flash?:
                       <div className="text-xs text-slate-500">
                         {confirmed} tenuti su {active.length} · raggio {plan.raggioKm} km
                         {plan.totalDistance != null ? ` · ${plan.totalDistance} km · ~${plan.totalDuration} min` : ""}
-                        {pending ? " · puoi creare il percorso anche senza tutte le risposte" : ""}
+                        {!locked && pending ? " · i clienti ancora da chiamare restano in giornata, solo No li toglie" : ""}
                       </div>
                     </div>
                     <button type="button" onClick={() => removePlan(plan.id)} className="text-slate-400 hover:text-rose-600 p-1" aria-label="Elimina piano">
@@ -125,7 +126,7 @@ export default function PlanBoard({ initial, flash }: { initial: Plan[]; flash?:
                           <th className="text-right px-3 py-2 w-16">km</th>
                           <th className="text-left px-3 py-2">Perché</th>
                           <th className="text-left px-3 py-2">Stato</th>
-                          <th className="text-right px-3 py-2">Scelta</th>
+                          {!locked && <th className="text-right px-3 py-2">Scelta</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -149,43 +150,45 @@ export default function PlanBoard({ initial, flash }: { initial: Plan[]; flash?:
                                   {STATUS_LABEL[stop.status]}
                                 </span>
                               </td>
-                              <td className="px-3 py-2">
-                                {!dropped && (
-                                  <div className="flex justify-end gap-1">
-                                    {phone && <a href={telHref(phone)} className="p-1.5 rounded border border-slate-200" title="Chiama"><Phone size={14} /></a>}
-                                    <button
-                                      type="button"
-                                      disabled={!!busy || kept}
-                                      title="Tieni"
-                                      onClick={() =>
-                                        act(`ok-${stop.id}`, `/api/stops/${stop.id}`, {
-                                          method: "PATCH",
-                                          headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ status: "CONFERMATO" }),
-                                        })
-                                      }
-                                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-emerald-600 text-white disabled:opacity-50"
-                                    >
-                                      <Check size={12} /> Tieni
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={!!busy}
-                                      title="Non può, sostituisci"
-                                      onClick={() =>
-                                        act(`no-${stop.id}`, `/api/stops/${stop.id}`, {
-                                          method: "PATCH",
-                                          headers: { "Content-Type": "application/json" },
-                                          body: JSON.stringify({ status: "NON_DISPONIBILE" }),
-                                        })
-                                      }
-                                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-rose-200 text-rose-700"
-                                    >
-                                      <X size={12} /> No
-                                    </button>
-                                  </div>
-                                )}
-                              </td>
+                              {!locked && (
+                                <td className="px-3 py-2">
+                                  {!dropped && (
+                                    <div className="flex justify-end gap-1">
+                                      {phone && <a href={telHref(phone)} className="p-1.5 rounded border border-slate-200" title="Chiama"><Phone size={14} /></a>}
+                                      <button
+                                        type="button"
+                                        disabled={!!busy || kept}
+                                        title="Tieni"
+                                        onClick={() =>
+                                          act(`ok-${stop.id}`, `/api/stops/${stop.id}`, {
+                                            method: "PATCH",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ status: "CONFERMATO" }),
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-emerald-600 text-white disabled:opacity-50"
+                                      >
+                                        <Check size={12} /> Tieni
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={!!busy}
+                                        title="Non può, sostituisci"
+                                        onClick={() =>
+                                          act(`no-${stop.id}`, `/api/stops/${stop.id}`, {
+                                            method: "PATCH",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ status: "NON_DISPONIBILE" }),
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-rose-200 text-rose-700"
+                                      >
+                                        <X size={12} /> No
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
@@ -193,29 +196,51 @@ export default function PlanBoard({ initial, flash }: { initial: Plan[]; flash?:
                     </table>
                   </div>
 
+                  {locked && (
+                    <div className="px-4 py-3 bg-emerald-50 border-t border-emerald-100 flex flex-wrap items-center gap-3 text-sm text-emerald-900">
+                      <span className="font-medium">Giornata confermata. È in calendario.</span>
+                      <Link href={calendarHref[plan.id] ?? `/calendario?date=${plan.data.slice(0, 10)}`} className="font-medium text-teal-800 underline">
+                        Vedi in calendario
+                      </Link>
+                      <button
+                        type="button"
+                        disabled={!!busy}
+                        className="text-xs text-slate-500 underline ml-auto"
+                        onClick={() =>
+                          act(`reopen-${plan.id}`, `/api/plans/${plan.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "reopen" }),
+                          })
+                        }
+                      >
+                        Riapri modifica
+                      </button>
+                    </div>
+                  )}
+
                   <div className="px-4 py-3 border-t border-slate-200 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={!!busy || active.length === 0}
-                    className="text-sm px-3 py-2 rounded-lg bg-teal-700 text-white disabled:opacity-50 font-medium"
-                    onClick={() => act(`opt-${plan.id}`, `/api/plans/${plan.id}/optimize`, { method: "POST" })}
-                  >
-                    {busy === `opt-${plan.id}` ? (
-                      <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Sto creando il percorso…</span>
-                    ) : (
-                      "Crea percorso e metti in calendario"
-                    )}
-                  </button>
-                  {(calendarHref[plan.id] || plan.status === "PRONTO" || plan.status === "INVIATO") && (
-                    <Link href={calendarHref[plan.id] ?? `/calendario?date=${plan.data.slice(0, 10)}`} className="text-sm font-medium text-teal-700">
-                      Vedi in calendario
-                    </Link>
+                  {!locked && (
+                    <button
+                      type="button"
+                      disabled={!!busy || active.length === 0}
+                      className="text-sm px-3 py-2 rounded-lg bg-teal-700 text-white disabled:opacity-50 font-medium"
+                      onClick={() => act(`opt-${plan.id}`, `/api/plans/${plan.id}/optimize`, { method: "POST" })}
+                    >
+                      {busy === `opt-${plan.id}` ? (
+                        <span className="inline-flex items-center gap-2"><Loader2 size={16} className="animate-spin" /> Sto creando il percorso…</span>
+                      ) : (
+                        "Crea percorso e metti in calendario"
+                      )}
+                    </button>
                   )}
 
                   <div className="flex flex-wrap gap-2 ml-auto">
-                    <button type="button" className="text-sm px-3 py-1.5 rounded-lg border border-slate-200" onClick={() => loadCandidates(plan.id)}>
-                      <Plus size={14} className="inline mr-1" /> Altro cliente
-                    </button>
+                    {!locked && (
+                      <button type="button" className="text-sm px-3 py-1.5 rounded-lg border border-slate-200" onClick={() => loadCandidates(plan.id)}>
+                        <Plus size={14} className="inline mr-1" /> Altro cliente
+                      </button>
+                    )}
                     <button
                       type="button"
                       disabled={!!busy}
@@ -255,7 +280,7 @@ export default function PlanBoard({ initial, flash }: { initial: Plan[]; flash?:
                   </div>
                   </div>
 
-                  {candidates[plan.id] && (
+                  {!locked && candidates[plan.id] && (
                     <table className="w-full text-sm border-t border-slate-200">
                       <thead className="text-xs text-slate-500">
                         <tr>

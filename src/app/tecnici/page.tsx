@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ export default function TecniciPage() {
     role: "TECNICO" as SessionRole,
   });
   const [me, setMe] = useState<{ role: SessionRole } | null>(null);
+  const [defaultStart, setDefaultStart] = useState("Via San Giorgio 14, Cavallermaggiore");
   const [edit, setEdit] = useState<{
     id: string;
     nome: string;
@@ -25,6 +26,7 @@ export default function TecniciPage() {
     email: string;
     role: SessionRole;
     password: string;
+    startLabel: string;
   } | null>(null);
 
   function load() {
@@ -40,6 +42,12 @@ export default function TecniciPage() {
       .then((r) => r.json())
       .then(setMe)
       .catch(() => setMe(null));
+    fetch("/api/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.startLabel) setDefaultStart(d.startLabel);
+      })
+      .catch(() => undefined);
   }, []);
 
   async function create(e: React.FormEvent) {
@@ -68,6 +76,7 @@ export default function TecniciPage() {
       email: u.email ?? "",
       role: u.role,
       password: "",
+      startLabel: u.startLabel ?? "",
     });
   }
 
@@ -83,6 +92,7 @@ export default function TecniciPage() {
         telefono: edit.telefono,
         email: edit.email,
         role: edit.role,
+        startLabel: edit.startLabel,
         ...(edit.password ? { password: edit.password } : {}),
       }),
     });
@@ -120,6 +130,7 @@ export default function TecniciPage() {
               <th className="text-left px-4 py-2">Nome</th>
               <th className="text-left px-4 py-2">Ruolo</th>
               <th className="text-left px-4 py-2">Telefono</th>
+              <th className="text-left px-4 py-2">Parte da</th>
               <th className="text-left px-4 py-2">Stato</th>
               {me?.role === "ADMIN" && <th className="text-left px-4 py-2"></th>}
             </tr>
@@ -133,6 +144,7 @@ export default function TecniciPage() {
                 </td>
                 <td className="px-4 py-2.5">{ROLE_LABEL[u.role]}</td>
                 <td className="px-4 py-2.5">{u.telefono ?? "—"}</td>
+                <td className="px-4 py-2.5 text-slate-600">{u.startLabel || defaultStart}</td>
                 <td className="px-4 py-2.5">
                   <button type="button" className="text-xs font-medium" onClick={() => void toggleAttivo(u)}>
                     {(u.attivo ?? true) ? "Attivo" : "Non attivo"}
@@ -164,6 +176,7 @@ export default function TecniciPage() {
             <option value="ADMIN">Admin</option>
           </select>
           <input className="field" type="password" placeholder="Nuova password (opzionale)" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} />
+          <input className="field col-span-2" placeholder={`Parte da (vuoto = ${defaultStart})`} value={edit.startLabel} onChange={(e) => setEdit({ ...edit, startLabel: e.target.value })} />
           <div className="col-span-2 flex gap-2">
             <button className="btn btn-primary" type="submit">Salva</button>
             <button className="btn" type="button" onClick={() => setEdit(null)}>Annulla</button>

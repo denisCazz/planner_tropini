@@ -4,7 +4,7 @@ import { memo, useState } from "react";
 import { MapPin, Route, CheckCircle2, Plus, Eraser, AlertTriangle, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import type { Client, OrgUser, StatoCliente } from "@/types/client";
-import { MAP_ICON_PRESETS } from "@/lib/mapIcons";
+import { GIRO_ICON, MAP_ICON_PRESETS } from "@/lib/mapIcons";
 
 const STATO_LABELS: Record<StatoCliente, string> = {
   ATTIVO: "Attivo",
@@ -119,7 +119,9 @@ const ClientRow = memo(function ClientRow({
           title="Scegli icona mappa"
           aria-label="Scegli icona mappa"
         >
-          {c.icona ? (
+          {c.inGiro ? (
+            <span title="Cliente in giro">{GIRO_ICON}</span>
+          ) : c.icona ? (
             <span>{c.icona}</span>
           ) : (
             <span className={`w-2.5 h-2.5 rounded-full ${STATO_DOT[c.stato]}`} />

@@ -1,8 +1,9 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireOperator } from "@/lib/tenant";
 import { parsePlanningCommand } from "@/lib/plan-parse";
 import { createPlans, PLAN_INCLUDE, technicianNames } from "@/lib/planner";
 import { prisma } from "@/lib/prisma";
+import { answerDataQuestion, isDataQuestion } from "@/lib/aiTools";
 
 export const maxDuration = 60;
 
@@ -12,6 +13,10 @@ export async function POST(req: NextRequest) {
   const { text } = (await req.json()) as { text?: string };
   if (!text?.trim()) return NextResponse.json({ error: "Scrivi cosa vuoi pianificare" }, { status: 400 });
   try {
+    if (isDataQuestion(text)) {
+      const answer = await answerDataQuestion(session.organizationId, text);
+      return NextResponse.json({ kind: "domanda", messaggio: answer.messaggio, clienti: answer.clienti });
+    }
     const names = await technicianNames(session.organizationId);
     const parsed = await parsePlanningCommand(text, names);
     if (parsed.assignments.length === 0) {

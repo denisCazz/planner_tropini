@@ -5,6 +5,13 @@ export interface MapIconPreset {
   label: string;
 }
 
+/** Categoria mostrata in mappa finché non arriva l'elenco definitivo. */
+export const MAP_CLIENT_FILTER = "ATTIVO";
+
+/** Clienti inseriti in un giro o con appuntamento da oggi in poi. */
+export const GIRO_ICON = "🐴";
+export const GIRO_COLOR = "#b45309";
+
 export const MAP_ICON_PRESETS: MapIconPreset[] = [
   { emoji: "⭐", label: "Importante" },
   { emoji: "🔥", label: "Caldo" },

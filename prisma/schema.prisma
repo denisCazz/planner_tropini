@@ -139,6 +139,10 @@ model User {
   plans           Plan[]
   /// Orario di lavoro: array JSON [{day:1-7, start:"08:00", end:"18:00"}]; default 8-18 se assente
   workingHours    Json?
+  /// Partenza del tecnico. Vuoto = sede in Impostazioni (Cavallermaggiore).
+  startLabel      String?
+  startLat        Float?
+  startLng        Float?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 }
@@ -294,6 +298,11 @@ model Settings {
   nearestNeighbours Int          @default(4)
   companyName       String       @default("Tropini")
   smsTemplate       String       @default("Buongiorno {nome}, siamo {azienda}. Il tecnico {operatore} passerebbe {giorno} per la manutenzione. Risponda SI per confermare o NO se non e' disponibile.")
+  /// Carburante per la stima costi (nome come nel CSV MIMIT, es. Gasolio)
+  fuelType          String       @default("Gasolio")
+  consumoL100       Float        @default(7)
+  fuelPrice         Float?
+  fuelPriceAt       DateTime?
 }
 
 enum PlanStatus {

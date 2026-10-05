@@ -7,6 +7,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { Client } from "@/types/client";
+import { GIRO_COLOR, GIRO_ICON } from "@/lib/mapIcons";
 
 type Props = {
   items: Client[];
@@ -22,8 +23,9 @@ const STATO_COLORS: Record<string, string> = {
 };
 
 function pin(client: Client) {
-  const color = client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#64748b");
-  const glyph = client.urgente ? "!" : client.icona ? client.icona : "";
+  const inGiro = client.inGiro === true;
+  const color = inGiro ? GIRO_COLOR : client.urgente ? "#dc2626" : (STATO_COLORS[client.stato] ?? "#64748b");
+  const glyph = inGiro ? GIRO_ICON : client.urgente ? "!" : client.icona ? client.icona : "";
   return L.divIcon({
     html: `<div class="cm-pin" style="--pin-color:${color}"><div class="cm-pin__body"><span class="cm-pin__glyph">${glyph}</span></div></div>`,
     className: "",

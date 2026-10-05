@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef } from "react";
 import L from "leaflet";
@@ -13,7 +13,7 @@ import type {
   ZoneBounds,
   Appointment,
 } from "@/types/client";
-import { MAP_ICON_PRESETS } from "@/lib/mapIcons";
+import { GIRO_COLOR, GIRO_ICON, MAP_ICON_PRESETS } from "@/lib/mapIcons";
 
 function escapeHtml(s: string): string {
   return s
@@ -64,6 +64,9 @@ function markerIcon(
   }
   if (isSelected) {
     return makePin("✓", "cm-pin--selected", "#4f46e5");
+  }
+  if (client.inGiro) {
+    return makePin(GIRO_ICON, "cm-pin--emoji", GIRO_COLOR);
   }
   if (client.icona) {
     return makePin(client.icona, "cm-pin--emoji", "#6366f1");

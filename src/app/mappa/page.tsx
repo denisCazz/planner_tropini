@@ -13,6 +13,7 @@ import { haversineKm } from "@/lib/geo";
 import { useOrgUsers } from "@/lib/useOrgUsers";
 import { technicianDisplayName } from "@/lib/roles";
 import { toLocalDateKey } from "@/lib/dates";
+import { GIRO_ICON, MAP_CLIENT_FILTER } from "@/lib/mapIcons";
 
 const ClientMap = dynamic(() => import("@/components/map/ClientMap"), {
   ssr: false,
@@ -46,7 +47,7 @@ function MappaContent() {
   const [items, setItems] = useState<Intervento[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [stato, setStato] = useState(sp.get("stato") ?? "");
+  const [stato, setStato] = useState(sp.get("stato") ?? MAP_CLIENT_FILTER);
   const [tipo, setTipo] = useState("");
   const [citta, setCitta] = useState("");
   const [tech, setTech] = useState(sp.get("technicianId") ?? "");
@@ -68,8 +69,13 @@ function MappaContent() {
   }, [q]);
 
   const loadClients = useCallback(async () => {
-    const p = new URLSearchParams({ slim: "1", hasCoords: "1", limit: "5000" });
-    if (stato) p.set("stato", stato);
+    const p = new URLSearchParams({
+      slim: "1",
+      hasCoords: "1",
+      limit: "5000",
+      inPlan: "1",
+      stato: stato || MAP_CLIENT_FILTER,
+    });
     if (debouncedQ) p.set("search", debouncedQ);
     try {
       const res = await fetch(`/api/clients?${p}`);
@@ -196,7 +202,7 @@ function MappaContent() {
                 onClick={() => {
                   setLayer("clienti");
                   setSelectedId(null);
-                  setStato("");
+                  setStato(MAP_CLIENT_FILTER);
                 }}
               >
                 Clienti
@@ -220,8 +226,7 @@ function MappaContent() {
             {layer === "clienti" ? (
               <label className="block text-[11px] font-medium text-slate-500">
                 Stato
-                <select className="field mt-1" value={stato} onChange={(e) => setStato(e.target.value)}>
-                  <option value="">Tutti</option>
+                <select className="field mt-1" value={stato || MAP_CLIENT_FILTER} onChange={(e) => setStato(e.target.value)}>
                   <option value="ATTIVO">Attivi</option>
                   <option value="INATTIVO">Inattivi</option>
                   <option value="PROSPECT">Prospect</option>
@@ -279,6 +284,9 @@ function MappaContent() {
                 ? `${filteredClients.length} clienti in mappa${clientTotal > filteredClients.length ? ` · ${clientTotal} con GPS` : ""}`
                 : `${filteredInterventi.length} interventi in mappa`}
             </p>
+            {layer === "clienti" && (
+              <p className="text-[11px] text-amber-800">{GIRO_ICON} Cavallino = cliente in giro</p>
+            )}
             {loadError && <p className="text-xs text-red-600">{loadError}</p>}
           </div>
           <div className="flex-1 overflow-y-auto panel-scroll">
@@ -292,7 +300,7 @@ function MappaContent() {
                       selectedId === c.id ? "bg-teal-50" : "hover:bg-slate-50"
                     }`}
                   >
-                    <div className="font-medium text-sm truncate">{displayName(c)}</div>
+                    <div className="font-medium text-sm truncate">{c.inGiro ? `${GIRO_ICON} ` : ""}{displayName(c)}</div>
                     <div className="text-xs text-slate-500">{c.citta ?? "—"}</div>
                   </button>
                 ))

@@ -1,4 +1,4 @@
-﻿export type StatoCliente = "ATTIVO" | "INATTIVO" | "PROSPECT";
+export type StatoCliente = "ATTIVO" | "INATTIVO" | "PROSPECT";
 
 export type UserRole = "ADMIN" | "USER" | "TECNICO";
 
@@ -15,6 +15,9 @@ export interface OrgUser {
   note?: string | null;
   assignedClientCount?: number;
   workingHours?: WorkingHoursSlot[] | null;
+  startLabel?: string | null;
+  startLat?: number | null;
+  startLng?: number | null;
 }
 
 export interface ClientNote {
@@ -48,6 +51,8 @@ export interface Client {
   stato: StatoCliente;
   urgente: boolean;
   icona?: string | null;
+  /** In un giro o con appuntamento da oggi in poi. */
+  inGiro?: boolean;
   ultimaVisita: string | null;
   lat: number | null;
   lng: number | null;
@@ -90,6 +95,10 @@ export interface Settings {
   nearestNeighbours: number;
   companyName?: string;
   smsTemplate?: string;
+  fuelType?: string;
+  consumoL100?: number;
+  fuelPrice?: number | null;
+  fuelPriceAt?: string | null;
 }
 
 export interface RouteStep {

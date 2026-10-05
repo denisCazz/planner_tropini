@@ -1,14 +1,34 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUp, Loader2, Mic, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowUp, Loader2, Mic, Phone, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 const EXAMPLES = [
   "Pianificami le giornate di Gianfranco e Simone domani. Gianfranco 4 clienti zona Revello, Simone 6 zona Carmagnola.",
+  "Dammi il numero di Cinzia Paduano di Grugliasco",
   "Settimana di Marco: lunedì Saluzzo, martedì Savigliano, mercoledì Fossano. 5 clienti al giorno.",
 ];
+
+interface AnswerClient {
+  id: number;
+  nome: string;
+  cognome: string;
+  ragioneSociale: string | null;
+  citta: string | null;
+  telefono: string | null;
+  telefono2: string | null;
+  indirizzo: string | null;
+}
+
+interface Bubble {
+  id: number;
+  question: string;
+  answer: string;
+  clienti: AnswerClient[];
+}
 
 interface SpeechRec {
   lang: string;
@@ -23,6 +43,7 @@ export default function AssistentePage() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
+  const [bubbles, setBubbles] = useState<Bubble[]>([]);
 
   function dictate() {
     const Ctor = (window as unknown as { SpeechRecognition?: new () => SpeechRec; webkitSpeechRecognition?: new () => SpeechRec })
@@ -56,6 +77,14 @@ export default function AssistentePage() {
         return;
       }
       if (!res.ok) throw new Error(data.error ?? "Errore");
+      if (data.kind === "domanda") {
+        setBubbles((prev) => [
+          ...prev,
+          { id: Date.now(), question: q, answer: data.messaggio || "Nessun dato.", clienti: data.clienti ?? [] },
+        ]);
+        setText("");
+        return;
+      }
       if (!data.batchId) {
         toast.message(data.messaggio || "Non ho capito la richiesta. I tecnici devono esistere in anagrafica.");
         return;
@@ -76,8 +105,36 @@ export default function AssistentePage() {
       </div>
       <h1 className="text-3xl font-bold text-slate-900">Chi mandiamo, dove, e quanti.</h1>
       <p className="mt-2 text-slate-500">
-        Scrivi o detta. L&apos;AI usa i tecnici già in anagrafica, sceglie i clienti in zona e prepara la lista da chiamare.
+        Scrivi o detta. Puoi pianificare una giornata oppure chiedere un dato, per esempio un numero di telefono.
       </p>
+      {bubbles.length > 0 && (
+        <div className="mt-4 space-y-3">
+          {bubbles.map((b) => (
+            <div key={b.id} className="space-y-2">
+              <p className="text-sm text-slate-500">{b.question}</p>
+              <div className="rounded-2xl bg-white border border-slate-200 px-4 py-3 text-sm text-slate-800 whitespace-pre-wrap">{b.answer}</div>
+              {b.clienti.map((c) => {
+                const phone = c.telefono || c.telefono2;
+                const digits = (phone ?? "").replace(/\D/g, "");
+                const label = [c.nome, c.cognome].filter(Boolean).join(" ") || c.ragioneSociale || "Cliente";
+                return (
+                  <div key={c.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2 flex flex-wrap items-center gap-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="font-medium">{label}</div>
+                      <div className="text-xs text-slate-500">{[c.citta, c.indirizzo].filter(Boolean).join(" · ") || "—"}</div>
+                    </div>
+                    <div className="ml-auto flex gap-2">
+                      {phone && <a className="btn btn-primary text-xs py-1" href={`tel:${digits}`}><Phone size={12} /> {phone}</a>}
+                      {digits && <a className="btn text-xs py-1" href={`https://wa.me/${digits}`} target="_blank" rel="noreferrer">WhatsApp</a>}
+                      <Link className="btn text-xs py-1" href={`/clienti/${c.id}`}>Scheda</Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
       <form
         className="mt-5 relative"
         onSubmit={(e) => {

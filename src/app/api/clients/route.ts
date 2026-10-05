@@ -6,6 +6,8 @@ import { requireSession, requireOperator, orgScope } from "@/lib/tenant";
 import { resolveAssignedUser, INVALID_ASSIGNEE } from "@/lib/tenant";
 import type { StatoCliente } from "@/types/client";
 import { clientSearchWhere, rankClientMatch } from "@/lib/search";
+import { MAP_CLIENT_FILTER } from "@/lib/mapIcons";
+import { parseDateKey, toLocalDateKey } from "@/lib/dates";
 
 export async function GET(req: NextRequest) {
   const { session, error } = await requireSession();
@@ -21,9 +23,37 @@ export async function GET(req: NextRequest) {
   const parsedLimit = parseInt(searchParams.get("limit") ?? (slim ? "80" : "150"), 10);
   const limit = Math.min(Math.max(Number.isNaN(parsedLimit) ? 80 : parsedLimit, 1), 5000);
 
-  const where: Prisma.ClientWhereInput = {
+  const inPlan = searchParams.get("inPlan") === "1";
+  const today = parseDateKey(toLocalDateKey(new Date()));
+  let giroIds: number[] = [];
+  if (inPlan && today) {
+    const [giroStops, giroAppts] = await Promise.all([
+      prisma.planStop.findMany({
+        where: {
+          status: { not: "NON_DISPONIBILE" },
+          plan: {
+            organizationId: session!.organizationId,
+            data: { gte: today },
+            status: { in: ["CONFERMA", "PRONTO", "INVIATO"] },
+          },
+        },
+        select: { clientId: true },
+      }),
+      prisma.appointment.findMany({
+        where: {
+          organizationId: session!.organizationId,
+          date: { gte: today },
+          stato: { not: "ANNULLATO" },
+        },
+        select: { clientId: true },
+      }),
+    ]);
+    giroIds = [...new Set([...giroStops.map((s) => s.clientId), ...giroAppts.map((a) => a.clientId)])];
+  }
+  const giroSet = new Set(giroIds);
+
+  const baseWhere: Prisma.ClientWhereInput = {
     ...orgScope(session!.organizationId),
-    ...(stato ? { stato } : {}),
     ...(urgente ? { urgente: true } : {}),
     ...(hasCoords ? { lat: { not: null }, lng: { not: null } } : {}),
     ...(assignedTo
@@ -31,6 +61,21 @@ export async function GET(req: NextRequest) {
       : {}),
     ...clientSearchWhere(search),
   };
+  const where: Prisma.ClientWhereInput = inPlan
+    ? {
+        AND: [
+          baseWhere,
+          {
+            OR: [
+              { stato: stato || MAP_CLIENT_FILTER },
+              ...(giroIds.length ? [{ id: { in: giroIds } }] : []),
+            ],
+          },
+        ],
+      }
+    : { ...baseWhere, ...(stato ? { stato } : {}) };
+
+  const withGiro = <T extends { id: number }>(row: T) => ({ ...row, inGiro: giroSet.has(row.id) });
 
   const slimSelect = {
     id: true,
@@ -66,10 +111,12 @@ export async function GET(req: NextRequest) {
       }),
       prisma.client.count({ where }),
     ]);
-    const items = rows.map(({ assignedUser, ...c }) => ({
-      ...c,
-      assignedUserName: assignedUser?.username ?? null,
-    }));
+    const items = rows.map(({ assignedUser, ...c }) =>
+      withGiro({
+        ...c,
+        assignedUserName: assignedUser?.username ?? null,
+      })
+    );
     if (search.trim()) {
       items.sort(
         (a, b) =>
@@ -91,10 +138,12 @@ export async function GET(req: NextRequest) {
     }),
     prisma.client.count({ where }),
   ]);
-  let clients = rows.map(({ assignedUser, ...c }) => ({
-    ...c,
-    assignedUserName: assignedUser?.username ?? null,
-  }));
+  let clients = rows.map(({ assignedUser, ...c }) =>
+    withGiro({
+      ...c,
+      assignedUserName: assignedUser?.username ?? null,
+    })
+  );
   if (search.trim()) {
     clients.sort(
       (a, b) =>

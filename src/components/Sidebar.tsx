@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ import {
   Route,
   Settings,
   LogOut,
+  Wallet,
 } from "lucide-react";
 import { ROLE_LABEL, type SessionRole } from "@/lib/roles";
 import GlobalSearch from "@/components/shell/GlobalSearch";
@@ -30,6 +31,7 @@ const NAV = [
   { href: "/pianificazione", label: "Pianificazione", icon: Route },
   { href: "/mappa", label: "Mappa", icon: Map },
   { href: "/tecnici", label: "Tecnici", icon: UserCog },
+  { href: "/costi", label: "Costi", icon: Wallet },
 ];
 
 type SessionInfo = {
