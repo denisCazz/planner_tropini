@@ -19,10 +19,25 @@ if (!existsSync(prismaCli)) {
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, [prismaCli, "migrate", "deploy"], {
-  stdio: "inherit",
-  cwd: root,
-  env: process.env,
-});
+function prisma(args) {
+  return spawnSync(process.execPath, [prismaCli, ...args], {
+    stdio: "inherit",
+    cwd: root,
+    env: process.env,
+  });
+}
+
+let result = prisma(["migrate", "deploy"]);
+if (result.status !== 0) {
+  // P3009: una migrazione restata "failed" blocca i deploy successivi.
+  // 20261005153000 è fallita per un BOM nel file SQL; la transazione non ha applicato nulla.
+  const resolved = prisma([
+    "migrate",
+    "resolve",
+    "--rolled-back",
+    "20261005153000_ai_day_plans",
+  ]);
+  if (resolved.status === 0) result = prisma(["migrate", "deploy"]);
+}
 
 process.exit(result.status ?? 1);

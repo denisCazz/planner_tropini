@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "PlanStatus" AS ENUM ('BOZZA', 'CONFERMA', 'PRONTO', 'INVIATO');
 
 -- CreateEnum
