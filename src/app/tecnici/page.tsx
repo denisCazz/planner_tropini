@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -17,6 +17,15 @@ export default function TecniciPage() {
     role: "TECNICO" as SessionRole,
   });
   const [me, setMe] = useState<{ role: SessionRole } | null>(null);
+  const [edit, setEdit] = useState<{
+    id: string;
+    nome: string;
+    cognome: string;
+    telefono: string;
+    email: string;
+    role: SessionRole;
+    password: string;
+  } | null>(null);
 
   function load() {
     fetch("/api/users")
@@ -50,6 +59,43 @@ export default function TecniciPage() {
     load();
   }
 
+  function startEdit(u: OrgUser) {
+    setEdit({
+      id: u.id,
+      nome: u.nome ?? "",
+      cognome: u.cognome ?? "",
+      telefono: u.telefono ?? "",
+      email: u.email ?? "",
+      role: u.role,
+      password: "",
+    });
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!edit) return;
+    const res = await fetch(`/api/users/${edit.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nome: edit.nome,
+        cognome: edit.cognome,
+        telefono: edit.telefono,
+        email: edit.email,
+        role: edit.role,
+        ...(edit.password ? { password: edit.password } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      toast.error((err as { error?: string }).error ?? "Errore");
+      return;
+    }
+    toast.success("Operatore aggiornato");
+    setEdit(null);
+    load();
+  }
+
   async function toggleAttivo(u: OrgUser) {
     const res = await fetch(`/api/users/${u.id}`, {
       method: "PATCH",
@@ -75,6 +121,7 @@ export default function TecniciPage() {
               <th className="text-left px-4 py-2">Ruolo</th>
               <th className="text-left px-4 py-2">Telefono</th>
               <th className="text-left px-4 py-2">Stato</th>
+              {me?.role === "ADMIN" && <th className="text-left px-4 py-2"></th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -91,11 +138,38 @@ export default function TecniciPage() {
                     {(u.attivo ?? true) ? "Attivo" : "Non attivo"}
                   </button>
                 </td>
+                {me?.role === "ADMIN" && (
+                  <td className="px-4 py-2.5">
+                    <button type="button" className="text-xs font-medium text-teal-700" onClick={() => startEdit(u)}>
+                      Modifica
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {me?.role === "ADMIN" && edit && (
+        <form onSubmit={saveEdit} className="card p-4 grid grid-cols-2 gap-3 max-w-xl mb-6">
+          <h2 className="col-span-2 font-semibold text-sm">Modifica operatore</h2>
+          <input className="field" placeholder="Nome" value={edit.nome} onChange={(e) => setEdit({ ...edit, nome: e.target.value })} />
+          <input className="field" placeholder="Cognome" value={edit.cognome} onChange={(e) => setEdit({ ...edit, cognome: e.target.value })} />
+          <input className="field" placeholder="Telefono" value={edit.telefono} onChange={(e) => setEdit({ ...edit, telefono: e.target.value })} />
+          <input className="field" placeholder="Email" value={edit.email} onChange={(e) => setEdit({ ...edit, email: e.target.value })} />
+          <select className="field" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value as SessionRole })}>
+            <option value="TECNICO">Tecnico</option>
+            <option value="USER">Operatore</option>
+            <option value="ADMIN">Admin</option>
+          </select>
+          <input className="field" type="password" placeholder="Nuova password (opzionale)" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} />
+          <div className="col-span-2 flex gap-2">
+            <button className="btn btn-primary" type="submit">Salva</button>
+            <button className="btn" type="button" onClick={() => setEdit(null)}>Annulla</button>
+          </div>
+        </form>
+      )}
 
       {me?.role === "ADMIN" && (
         <form onSubmit={create} className="card p-4 grid grid-cols-2 gap-3 max-w-xl">
