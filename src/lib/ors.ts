@@ -1,4 +1,4 @@
-export interface ORSWaypoint {
+﻿export interface ORSWaypoint {
   name: string;
   location: [number, number]; // [lng, lat]
 }
@@ -10,6 +10,7 @@ export interface ORSJob {
 }
 
 export interface ORSOptimizationResult {
+  unassigned?: Array<{ id: number }>;
   routes: Array<{
     steps: Array<{
       type: string;
@@ -47,7 +48,8 @@ const ORS_BASE = "https://api.openrouteservice.org";
 export async function optimizeRoute(
   startLng: number,
   startLat: number,
-  jobs: ORSJob[]
+  jobs: ORSJob[],
+  opts: { serviceSec?: number; dayStartSec?: number } = {}
 ): Promise<ORSOptimizationResult> {
   const apiKey = process.env.ORS_API_KEY;
   if (!apiKey) throw new Error("ORS_API_KEY non configurata");
@@ -57,6 +59,7 @@ export async function optimizeRoute(
       id: j.id,
       location: j.location,
       description: j.description ?? "",
+      ...(opts.serviceSec ? { service: opts.serviceSec } : {}),
     })),
     vehicles: [
       {
@@ -64,6 +67,7 @@ export async function optimizeRoute(
         profile: "driving-car",
         start: [startLng, startLat],
         end: [startLng, startLat],
+        ...(opts.dayStartSec !== undefined ? { time_window: [opts.dayStartSec, 86399] } : {}),
       },
     ],
   };

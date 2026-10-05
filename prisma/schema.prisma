@@ -115,6 +115,7 @@ model Organization {
   availabilities  CustomerAvailability[]
   suggestions     PlanningSuggestion[]
   documents       ClientDocument[]
+  plans           Plan[]
 }
 
 model User {
@@ -135,6 +136,7 @@ model User {
   routeHistory    RouteHistory[]
   appointments    Appointment[]
   interventi      Intervento[]
+  plans           Plan[]
   /// Orario di lavoro: array JSON [{day:1-7, start:"08:00", end:"18:00"}]; default 8-18 se assente
   workingHours    Json?
   createdAt       DateTime       @default(now())
@@ -181,6 +183,8 @@ model Client {
   addresses        Address[]
   availabilities   CustomerAvailability[]
   documents        ClientDocument[]
+  planStops        PlanStop[]
+  smsMessages      SmsMessage[]
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -288,6 +292,93 @@ model Settings {
   startLabel        String       @default("Via San Giorgio 14, Cavallermaggiore")
   /// Clienti più vicini inclusi dal tasto sulla mappa (1–20)
   nearestNeighbours Int          @default(4)
+  companyName       String       @default("Tropini")
+  smsTemplate       String       @default("Buongiorno {nome}, siamo {azienda}. Il tecnico {operatore} passerebbe {giorno} per la manutenzione. Risponda SI per confermare o NO se non e' disponibile.")
+}
+
+enum PlanStatus {
+  BOZZA
+  CONFERMA
+  PRONTO
+  INVIATO
+}
+
+enum StopStatus {
+  DA_CHIAMARE
+  SMS_INVIATO
+  CONFERMATO
+  NON_DISPONIBILE
+  NESSUNA_RISPOSTA
+}
+
+enum SmsDirection {
+  OUT
+  IN
+}
+
+model Plan {
+  id             Int          @id @default(autoincrement())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  batchId        String
+  data           DateTime     @db.Date
+  technicianId   String
+  technician     User         @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  zona           String
+  zonaLat        Float
+  zonaLng        Float
+  raggioKm       Float        @default(12)
+  numeroClienti  Int
+  note           String?
+  status         PlanStatus   @default(BOZZA)
+  geometry       Json?
+  totalDistance  Float?
+  totalDuration  Int?
+  publicToken    String       @unique
+  sentAt         DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  stops          PlanStop[]
+
+  @@index([organizationId, data])
+  @@index([batchId])
+}
+
+model PlanStop {
+  id         Int        @id @default(autoincrement())
+  planId     Int
+  plan       Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  clientId   Int
+  client     Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  ordine     Int?
+  status     StopStatus @default(DA_CHIAMARE)
+  orario     String?
+  score      Float      @default(0)
+  motivo     String?
+  distanzaKm Float?
+  note       String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  messages   SmsMessage[]
+
+  @@unique([planId, clientId])
+}
+
+model SmsMessage {
+  id         Int          @id @default(autoincrement())
+  direction  SmsDirection
+  clientId   Int?
+  client     Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  stopId     Int?
+  stop       PlanStop?    @relation(fields: [stopId], references: [id], onDelete: SetNull)
+  from       String
+  to         String
+  body       String
+  providerId String?
+  intent     String?
+  createdAt  DateTime     @default(now())
+
+  @@index([from])
 }
 
 model Appointment {

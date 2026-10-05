@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { geocodeAddress } from "@/lib/geocode";
 import { requireAdmin, requireSession } from "@/lib/tenant";
@@ -28,7 +28,7 @@ export async function PUT(req: NextRequest) {
   if (error) return error;
 
   const body = await req.json();
-  const { startLabel, nearestNeighbours: nnRaw } = body;
+  const { startLabel, nearestNeighbours: nnRaw, companyName, smsTemplate } = body;
 
   let startLat = body.startLat;
   let startLng = body.startLng;
@@ -64,6 +64,8 @@ export async function PUT(req: NextRequest) {
       ...(startLng !== undefined && { startLng }),
       ...(startLabel !== undefined && { startLabel }),
       ...(nearestNeighbours !== undefined && { nearestNeighbours }),
+      ...(typeof companyName === "string" && companyName.trim() && { companyName: companyName.trim() }),
+      ...(typeof smsTemplate === "string" && smsTemplate.trim() && { smsTemplate: smsTemplate.trim() }),
     },
     create: {
       organizationId: session!.organizationId,

@@ -1,4 +1,4 @@
-export type StatoCliente = "ATTIVO" | "INATTIVO" | "PROSPECT";
+﻿export type StatoCliente = "ATTIVO" | "INATTIVO" | "PROSPECT";
 
 export type UserRole = "ADMIN" | "USER" | "TECNICO";
 
@@ -88,6 +88,8 @@ export interface Settings {
   startLng: number;
   startLabel: string;
   nearestNeighbours: number;
+  companyName?: string;
+  smsTemplate?: string;
 }
 
 export interface RouteStep {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -58,7 +58,7 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const from = searchParams.get("from") || "/dashboard";
+  const from = searchParams.get("from") || "/assistente";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

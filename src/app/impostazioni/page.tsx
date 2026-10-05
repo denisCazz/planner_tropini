@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { Save, Loader2 } from "lucide-react";
@@ -10,6 +10,8 @@ export default function ImpostazioniPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [label, setLabel] = useState("");
   const [nearestNeighbours, setNearestNeighbours] = useState(4);
+  const [companyName, setCompanyName] = useState("Tropini");
+  const [smsTemplate, setSmsTemplate] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -22,6 +24,8 @@ export default function ImpostazioniPage() {
         setNearestNeighbours(
           typeof data.nearestNeighbours === "number" ? data.nearestNeighbours : 4
         );
+        setCompanyName(data.companyName || "Tropini");
+        setSmsTemplate(data.smsTemplate || "");
         setLoading(false);
       });
   }, []);
@@ -34,7 +38,7 @@ export default function ImpostazioniPage() {
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startLabel: label, nearestNeighbours }),
+        body: JSON.stringify({ startLabel: label, nearestNeighbours, companyName, smsTemplate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -112,6 +116,25 @@ export default function ImpostazioniPage() {
                 <p className="text-xs text-gray-400 mt-1">
                   Quanti clienti vicini includere con il pulsante arancione (1–20). Default 4.
                 </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome azienda negli SMS</label>
+                <input
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Testo SMS ai clienti</label>
+                <textarea
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={smsTemplate}
+                  onChange={(e) => setSmsTemplate(e.target.value)}
+                />
+                <p className="text-xs text-gray-400 mt-1">Segnaposto: {"{nome}"} {"{operatore}"} {"{giorno}"} {"{azienda}"}</p>
               </div>
 
               <button

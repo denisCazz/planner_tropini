@@ -1,9 +1,11 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Sparkles,
+  ListChecks,
   LayoutDashboard,
   Users,
   Wrench,
@@ -19,6 +21,8 @@ import GlobalSearch from "@/components/shell/GlobalSearch";
 import BrandLogo from "@/components/BrandLogo";
 
 const NAV = [
+  { href: "/assistente", label: "Assistente", icon: Sparkles },
+  { href: "/piani", label: "Giornate", icon: ListChecks },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/clienti", label: "Clienti", icon: Users },
   { href: "/interventi", label: "Interventi", icon: Wrench },
@@ -63,7 +67,7 @@ export default function Sidebar() {
     <>
       <aside className="hidden md:flex w-[13.5rem] shrink-0 bg-white border-r border-slate-200 flex-col relative z-30 overflow-visible">
         <div className="px-4 py-4 border-b border-slate-100">
-          <Link href="/dashboard" className="flex items-center gap-2.5">
+          <Link href="/assistente" className="flex items-center gap-2.5">
             <BrandLogo variant="mark" className="h-9 w-9 shrink-0" />
             <div>
               <div className="text-[15px] font-semibold text-slate-900 tracking-tight leading-tight">
@@ -117,7 +121,7 @@ export default function Sidebar() {
       </aside>
 
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 flex items-center justify-around h-14 pb-safe">
-        {NAV.slice(0, 5).map(({ href, label, icon: Icon }) => {
+        {NAV.slice(0, 6).map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link

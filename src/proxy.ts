@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { SESSION_COOKIE } from "@/lib/auth-constants";
 
-const PUBLIC_PATHS = ["/login", "/api/health", "/api/auth/login"];
+const PUBLIC_PATHS = ["/login", "/api/health", "/api/auth/login", "/api/sms/inbound", "/p"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
@@ -29,7 +29,7 @@ export async function proxy(request: NextRequest) {
 
   if (pathname === "/login") {
     if (authenticated) {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
+      return NextResponse.redirect(new URL("/assistente", request.url));
     }
     return NextResponse.next();
   }
