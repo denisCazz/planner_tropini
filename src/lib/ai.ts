@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Integrazione LLM proattiva. Provider-agnostic: OpenAI o Anthropic via env.
  * Tutte le chiamate sono server-side (mai esporre la chiave al client).
  *
@@ -17,12 +17,25 @@ export interface AiResult {
   text: string;
 }
 
+function envValue(...names: string[]): string {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return "";
+}
+
 export function aiConfigured(): boolean {
-  return Boolean(process.env.AI_API_KEY);
+  return Boolean(apiKey());
 }
 
 export function aiProvider(): "openai" | "anthropic" {
-  return process.env.AI_PROVIDER === "anthropic" ? "anthropic" : "openai";
+  return envValue("AI_PROVIDER") === "anthropic" ? "anthropic" : "openai";
+}
+
+function apiKey(): string {
+  if (aiProvider() === "anthropic") return envValue("AI_API_KEY", "ANTHROPIC_API_KEY");
+  return envValue("AI_API_KEY", "OPENAI_API_KEY");
 }
 
 const DEFAULT_MODELS = {
@@ -35,7 +48,7 @@ async function callOpenAI(messages: AiMessage[], model: string): Promise<string>
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.AI_API_KEY}`,
+      Authorization: `Bearer ${apiKey()}`,
     },
     body: JSON.stringify({
       model,
@@ -63,7 +76,7 @@ async function callAnthropic(messages: AiMessage[], model: string): Promise<stri
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": process.env.AI_API_KEY ?? "",
+      "x-api-key": apiKey(),
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
@@ -89,10 +102,10 @@ async function callAnthropic(messages: AiMessage[], model: string): Promise<stri
 /** Completa una conversazione con il provider configurato. */
 export async function aiChat(messages: AiMessage[]): Promise<AiResult> {
   if (!aiConfigured()) {
-    throw new Error("AI non configurata: imposta AI_API_KEY (e opz. AI_PROVIDER) nel .env");
+    throw new Error("AI non configurata: imposta AI_API_KEY oppure OPENAI_API_KEY nel .env di Coolify");
   }
   const provider = aiProvider();
-  const model = process.env.AI_MODEL || DEFAULT_MODELS[provider];
+  const model = envValue("AI_MODEL", provider === "openai" ? "OPENAI_MODEL" : "ANTHROPIC_MODEL") || DEFAULT_MODELS[provider];
   const text =
     provider === "anthropic" ? await callAnthropic(messages, model) : await callOpenAI(messages, model);
   return { text };
